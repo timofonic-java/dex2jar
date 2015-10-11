@@ -1209,6 +1209,7 @@ public class Dex2IRConverter {
         LabelStmt ls = map.get(label);
         if (ls == null) {
             ls = Stmts.nLabel();
+            ls.lineNumber = label.lineNumber;
             map.put(label, ls);
         }
         return ls;
