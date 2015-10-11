@@ -23,6 +23,7 @@ package com.googlecode.d2j;
  */
 public class DexLabel {
     public String displayName;
+    public int lineNumber = -1;
     private int offset = -1;
 
     /**
