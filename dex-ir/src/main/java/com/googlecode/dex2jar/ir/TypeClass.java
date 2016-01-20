@@ -97,7 +97,8 @@ public enum TypeClass {
                 if (clz.fixed) {
                     // FIXME check out the infect of move-result-object
                     // FIXME div-int
-                    throw new RuntimeException("can not merge " + thizCls + " and " + clz);
+                    return thizCls;
+                    //throw new RuntimeException("can not merge " + thizCls + " and " + clz);
                 } else {
                     return thizCls;
                 }
