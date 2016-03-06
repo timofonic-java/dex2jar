@@ -86,6 +86,7 @@ public class Dex2Asm {
     protected static final ZeroTransformer T_zero = new ZeroTransformer();
     protected static final VoidInvokeTransformer T_voidInvoke = new VoidInvokeTransformer();
     protected static final NpeTransformer T_npe = new NpeTransformer();
+    protected static final MultiArrayTransformer T_multiArray = new MultiArrayTransformer();
 
     static private int clearClassAccess(boolean isInner, int access) {
         if ((access & Opcodes.ACC_INTERFACE) == 0) { // issue 55
@@ -276,7 +277,15 @@ public class Dex2Asm {
                             DexType type = (DexType) findAnnotationAttribute(ann, "value");
                             Clz enclosingClass = get(classes, type.desc);
                             clz.enclosingClass = enclosingClass;
+
+                            // apply patch from ChaeHoon Lim,
+                            // obfuscated code may declare itself as enclosing class
+                            // which cause dex2jar to endless loop
+                            //if(!clz.name.equals(clz.enclosingClass.name)) {
+                            //    enclosingClass.addInner(clz);
+                            //}
                             enclosingClass.addInner(clz);
+
                         }
                             break;
                         case DexConstants.ANNOTATION_ENCLOSING_METHOD_TYPE: {
@@ -379,9 +388,9 @@ public class Dex2Asm {
         boolean isInnerClass = false;
         if (clzInfo != null) {
             isInnerClass = clzInfo.enclosingClass != null || clzInfo.enclosingMethod != null;
-            access = clearClassAccess(isInnerClass, access);
-
         }
+        access = clearClassAccess(isInnerClass, access);
+
         cv.visit(Opcodes.V1_6, access, toInternalName(classNode.className), signature,
                 classNode.superClass == null ? null : toInternalName(classNode.superClass), interfaceInterNames);
 
@@ -575,6 +584,7 @@ public class Dex2Asm {
         T_new.transform(irMethod);
         T_fillArray.transform(irMethod);
         T_agg.transform(irMethod);
+        T_multiArray.transform(irMethod);
         T_voidInvoke.transform(irMethod);
         T_type.transform(irMethod);
         T_unssa.transform(irMethod);
@@ -606,9 +616,17 @@ public class Dex2Asm {
      * 
      */
     private static void searchEnclosing(Clz clz, List<InnerClassNode> innerClassNodes) {
+        Set<Clz> visitedClz = new HashSet<>();
         for (Clz p = clz; p != null; p = p.enclosingClass) {
+            if (!visitedClz.add(p)) { // prevent endless loop
+                break;
+            }
             Clz enclosingClass = p.enclosingClass;
             if (enclosingClass == null) {
+                break;
+            }
+            if (enclosingClass == clz) {
+                // enclosing itself, that is impossible
                 break;
             }
             int accessInInner = clearInnerAccess(p.access);
