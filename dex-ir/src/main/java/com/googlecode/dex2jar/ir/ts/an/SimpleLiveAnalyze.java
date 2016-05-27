@@ -86,6 +86,10 @@ public class SimpleLiveAnalyze extends BaseAnalyze<SimpleLiveValue> {
 
     @Override
     protected void onUseLocal(SimpleLiveValue aValue, Local local) {
+        if (aValue == null) {
+            //System.out.println(local);
+            return;
+        }
         aValue.used = true;
         super.onUseLocal(aValue, local);
     }

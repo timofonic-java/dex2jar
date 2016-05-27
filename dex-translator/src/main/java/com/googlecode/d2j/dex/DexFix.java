@@ -29,7 +29,7 @@ import com.googlecode.d2j.reader.Op;
 import com.googlecode.d2j.visitors.DexCodeVisitor;
 
 /**
- * 1. Dex omit the value of static-final filed if it is the default value.
+ * 1. Dex omit the value of static-final field if it is the default value.
  *
  * 2. static-final field init by zero, but assigned in clinit
  *
@@ -72,6 +72,14 @@ public class DexFix {
                     shouldNotBeAssigned.put(fn.field.getName() + ":" + fn.field.getType(), fn);
                 }
             }
+            ///++ workaround for jack compiler
+            else if ((fn.access & (DexConstants.ACC_STATIC | DexConstants.ACC_PUBLIC))
+                    == (DexConstants.ACC_STATIC | DexConstants.ACC_PUBLIC)
+                    && isPrimitiveZero(fn.field.getType(), fn.cst)) {
+                shouldNotBeAssigned.put(fn.field.getName() + ":" + fn.field.getType(), fn);
+                System.out.println(fn.field.getName() + ":" + fn.field.getType());
+            }
+            ///--
         }
         if (fs.isEmpty() && shouldNotBeAssigned.isEmpty()) {
             return;

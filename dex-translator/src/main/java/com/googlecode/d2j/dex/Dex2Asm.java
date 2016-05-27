@@ -414,10 +414,13 @@ public class Dex2Asm {
         }
         Collections.sort(innerClassNodes, INNER_CLASS_NODE_COMPARATOR);
         for (InnerClassNode icn : innerClassNodes) {
-            if (icn.innerName != null && !isJavaIdentifier(icn.innerName)) {
-                System.err.println("WARN: ignored invalid inner class name " + ", treat as anonymous inner class.");
-                icn.innerName = null;
-                icn.outerName = null;
+            if (icn.innerName != null) {
+                if (!isJavaIdentifier(icn.innerName) && !icn.innerName.contains("LambdaImpl")) {
+                    System.err.println("WARN: ignored invalid inner class name "
+                            + icn.innerName + ", treat as anonymous inner class of " + icn.outerName);
+                    icn.innerName = null;
+                    icn.outerName = null;
+                }
             }
             icn.accept(cv);
         }
