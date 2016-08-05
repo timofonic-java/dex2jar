@@ -15,6 +15,8 @@
  */
 package com.googlecode.d2j;
 
+import java.util.Objects;
+
 /**
  * represent a field_id_item in dex file format
  * 
@@ -25,15 +27,17 @@ public class Field {
     /**
      * name of the field.
      */
-    private String name;
+    private final String name;
     /**
      * owner class of the field, in TypeDescriptor format.
      */
-    private String owner;
+    private final String owner;
     /**
      * type of the field, in TypeDescriptor format.
      */
-    private String type;
+    private final String type;
+
+    private transient int hash;
 
     public Field(String owner, String name, String type) {
         this.owner = owner;
@@ -62,13 +66,34 @@ public class Field {
         return type;
     }
 
-    /*
-     * (non-Javadoc)
-     * 
-     * @see java.lang.Object#toString()
-     */
     @Override
     public String toString() {
-        return this.getOwner() + "." + this.getName() + " " + this.getType();
+        return owner + "." + name + " " + type;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj instanceof Field) {
+            Field o = (Field) obj;
+            return Objects.equals(owner, o.owner)
+                    && Objects.equals(name, o.name)
+                    && Objects.equals(type, o.type);
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        int h = hash;
+        if (h != 0) {
+            return h;
+        }
+        h = name != null ? name.hashCode() : 0;
+        h = 31 * h + (owner != null ? owner.hashCode() : 0);
+        h = 31 * h + (type != null ? type.hashCode() : 0);
+        return hash = h;
     }
 }

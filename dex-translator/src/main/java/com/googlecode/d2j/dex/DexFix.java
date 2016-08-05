@@ -17,7 +17,6 @@
 package com.googlecode.d2j.dex;
 
 import java.util.HashMap;
-import java.util.Map;
 
 import com.googlecode.d2j.DexConstants;
 import com.googlecode.d2j.Field;
@@ -36,12 +35,11 @@ import com.googlecode.d2j.visitors.DexCodeVisitor;
  * this method is try to fix the problems.
  */
 public class DexFix {
-    private static final int ACC_STATIC_FINAL = DexConstants.ACC_STATIC | DexConstants.ACC_FINAL;
 
-    public static void fixStaticFinalFieldValue(final DexFileNode dex) {
+    public static void fixStaticFieldValue(final DexFileNode dex) {
         if (dex.clzs != null) {
             for (DexClassNode classNode : dex.clzs) {
-                fixStaticFinalFieldValue(classNode);
+                fixStaticFieldValue(classNode);
             }
         }
     }
@@ -53,35 +51,22 @@ public class DexFix {
      * 
      * @param classNode
      */
-    public static void fixStaticFinalFieldValue(final DexClassNode classNode) {
+    public static void fixStaticFieldValue(final DexClassNode classNode) {
         if (classNode.fields == null) {
             return;
         }
-        final Map<String, DexFieldNode> fs = new HashMap<>();
-        final Map<String, DexFieldNode> shouldNotBeAssigned = new HashMap<>();
+
+        final HashMap<Field, DexFieldNode> staticPrimitiveFields = new HashMap<>();
         for (DexFieldNode fn : classNode.fields) {
-            if ((fn.access & ACC_STATIC_FINAL) == ACC_STATIC_FINAL) {
-                if (fn.cst == null) {
-                    char t = fn.field.getType().charAt(0);
-                    if (t == 'L' || t == '[') {
-                        // ignore Object
-                        continue;
-                    }
-                    fs.put(fn.field.getName() + ":" + fn.field.getType(), fn);
-                } else if (isPrimitiveZero(fn.field.getType(), fn.cst)) {
-                    shouldNotBeAssigned.put(fn.field.getName() + ":" + fn.field.getType(), fn);
+            if ((fn.access & DexConstants.ACC_STATIC) == DexConstants.ACC_STATIC) {
+                char t = fn.field.getType().charAt(0);
+                if (t == 'L' || t == '[') { // Ignore Object
+                    continue;
                 }
+                staticPrimitiveFields.put(fn.field, fn);
             }
-            ///++ workaround for jack compiler
-            else if ((fn.access & (DexConstants.ACC_STATIC | DexConstants.ACC_PUBLIC))
-                    == (DexConstants.ACC_STATIC | DexConstants.ACC_PUBLIC)
-                    && isPrimitiveZero(fn.field.getType(), fn.cst)) {
-                shouldNotBeAssigned.put(fn.field.getName() + ":" + fn.field.getType(), fn);
-                System.out.println(fn.field.getName() + ":" + fn.field.getType());
-            }
-            ///--
         }
-        if (fs.isEmpty() && shouldNotBeAssigned.isEmpty()) {
+        if (staticPrimitiveFields.isEmpty()) {
             return;
         }
         DexMethodNode node = null;
@@ -93,12 +78,11 @@ public class DexFix {
                 }
             }
         }
-        if (node != null) {
-            if (node.codeNode != null) {
-                node.codeNode.accept(new DexCodeVisitor() {
-                    @Override
-                    public void visitFieldStmt(Op op, int a, int b, Field field) {
-                        switch (op) {
+        if (node != null && node.codeNode != null) {
+            node.codeNode.accept(new DexCodeVisitor() {
+                @Override
+                public void visitFieldStmt(Op op, int a, int b, Field field) {
+                    switch (op) {
                         case SPUT:
                         case SPUT_BOOLEAN:
                         case SPUT_BYTE:
@@ -107,81 +91,48 @@ public class DexFix {
                         case SPUT_SHORT:
                         case SPUT_WIDE:
                             if (field.getOwner().equals(classNode.className)) {
-                                String key = field.getName() + ":" + field.getType();
-                                fs.remove(key);
-                                DexFieldNode dn = shouldNotBeAssigned.get(key);
-                                if (dn != null) {
-                                    //System.out.println(field.getName() + ":" + field.getType());
-                                    dn.cst = null;
+                                DexFieldNode fn = staticPrimitiveFields.remove(field);
+                                if (fn != null) {
+                                    fn.cst = null;
                                 }
                             }
                             break;
                         default:
                             // ignored
                             break;
-                        }
                     }
-                });
-            } else {
-                // has init but no code
-                return;
-            }
+                }
+            });
         }
 
-        for (DexFieldNode fn : fs.values()) {
-            fn.cst = getDefaultValueOfType(fn.field.getType().charAt(0));
+        for (DexFieldNode fn : staticPrimitiveFields.values()) {
+            fn.cst = getDefaultValueOfPrimitive(fn.field.getType().charAt(0));
         }
 
     }
 
-    private static Object getDefaultValueOfType(char t) {
+    private static Object getDefaultValueOfPrimitive(char t) {
         switch (t) {
-        case 'B':
-            return Byte.valueOf((byte) 0);
-        case 'Z':
-            return Boolean.FALSE;
-        case 'S':
-            return Short.valueOf((short) 0);
-        case 'C':
-            return Character.valueOf((char) 0);
-        case 'I':
-            return 0;
-        case 'F':
-            return Float.valueOf((float) 0.0);
-        case 'J':
-            return Long.valueOf((long) 0);
-        case 'D':
-            return Double.valueOf(0.0);
-        case '[':
-        case 'L':
-        default:
-            return null;
+            case 'B':
+                return (byte) 0;
+            case 'Z':
+                return Boolean.FALSE;
+            case 'S':
+                return (short) 0;
+            case 'C':
+                return (char) 0;
+            case 'I':
+                return 0;
+            case 'F':
+                return 0.0f;
+            case 'J':
+                return 0L;
+            case 'D':
+                return 0.0;
+            default:
+                return null;
             // impossible
         }
     }
 
-    static boolean isPrimitiveZero(String desc, Object value) {
-        if (value != null && desc != null && desc.length() > 0) {
-            switch (desc.charAt(0)) {
-            // case 'V':// VOID_TYPE
-            case 'Z':// BOOLEAN_TYPE
-                return ((Boolean) value).booleanValue() == false;
-            case 'C':// CHAR_TYPE
-                return ((Character) value).charValue() == (char) 0;
-            case 'B':// BYTE_TYPE
-                return ((Byte) value).byteValue() == 0;
-            case 'S':// SHORT_TYPE
-                return ((Short) value).shortValue() == 0;
-            case 'I':// INT_TYPE
-                return ((Integer) value).intValue() == 0;
-            case 'F':// FLOAT_TYPE
-                return ((Float) value).floatValue() == 0f;
-            case 'J':// LONG_TYPE
-                return ((Long) value).longValue() == 0L;
-            case 'D':// DOUBLE_TYPE
-                return ((Double) value).doubleValue() == 0.0;
-            }
-        }
-        return false;
-    }
 }

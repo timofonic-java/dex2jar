@@ -1,16 +1,51 @@
 package com.googlecode.d2j.dex;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 
-import com.googlecode.d2j.converter.Dex2IRConverter;
-import org.objectweb.asm.*;
+import org.objectweb.asm.AnnotationVisitor;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.InnerClassNode;
 
-import com.googlecode.d2j.*;
+import com.googlecode.d2j.DexConstants;
+import com.googlecode.d2j.DexType;
+import com.googlecode.d2j.Field;
+import com.googlecode.d2j.Method;
+import com.googlecode.d2j.Visibility;
+import com.googlecode.d2j.converter.Dex2IRConverter;
 import com.googlecode.d2j.converter.IR2JConverter;
-import com.googlecode.d2j.node.*;
+import com.googlecode.d2j.node.DexAnnotationNode;
+import com.googlecode.d2j.node.DexClassNode;
+import com.googlecode.d2j.node.DexFieldNode;
+import com.googlecode.d2j.node.DexFileNode;
+import com.googlecode.d2j.node.DexMethodNode;
 import com.googlecode.dex2jar.ir.IrMethod;
-import com.googlecode.dex2jar.ir.ts.*;
+import com.googlecode.dex2jar.ir.ts.AggTransformer;
+import com.googlecode.dex2jar.ir.ts.CleanLabel;
+import com.googlecode.dex2jar.ir.ts.DeadCodeTransformer;
+import com.googlecode.dex2jar.ir.ts.EndRemover;
+import com.googlecode.dex2jar.ir.ts.ExceptionHandlerTrim;
+import com.googlecode.dex2jar.ir.ts.Ir2JRegAssignTransformer;
+import com.googlecode.dex2jar.ir.ts.MultiArrayTransformer;
+import com.googlecode.dex2jar.ir.ts.NewTransformer;
+import com.googlecode.dex2jar.ir.ts.NpeTransformer;
+import com.googlecode.dex2jar.ir.ts.RemoveConstantFromSSA;
+import com.googlecode.dex2jar.ir.ts.RemoveLocalFromSSA;
+import com.googlecode.dex2jar.ir.ts.TypeTransformer;
+import com.googlecode.dex2jar.ir.ts.UnSSATransformer;
+import com.googlecode.dex2jar.ir.ts.VoidInvokeTransformer;
+import com.googlecode.dex2jar.ir.ts.ZeroTransformer;
 import com.googlecode.dex2jar.ir.ts.array.FillArrayTransformer;
 
 public class Dex2Asm {
@@ -352,8 +387,8 @@ public class Dex2Asm {
         if (cv == null) {
             return;
         }
-        // the default value of static-final field are omitted by dex, fix it
-        DexFix.fixStaticFinalFieldValue(classNode);
+        // Fix the default value of static field may be omitted by dex
+        DexFix.fixStaticFieldValue(classNode);
 
         String signature = null;
         if (classNode.anns != null) {
