@@ -86,9 +86,8 @@ public class DexFileReader implements BaseDexFileReader {
     static final int DBG_LINE_RANGE = 15;
     private static final int MAGIC_DEX = 0x0A786564 & 0x00FFFFFF;// hex for 'dex ', ignore the 0A
     private static final int MAGIC_ODEX = 0x0A796564 & 0x00FFFFFF;// hex for 'dey ', ignore the 0A
-    private static final int MAGIC_035 = 0x00353330;
-    private static final int MAGIC_036 = 0x00353330;
-    private static final int MAGIC_037 = 0x00373330;
+    private static final int MAGIC_035 = 0x30333500; // reverse order '0' '3', '5', '\0'
+    private static final int MAGIC_037 = 0x30333700;
     private static final int ENDIAN_CONSTANT = 0x12345678;
     private static final int VALUE_BYTE = 0;
     private static final int VALUE_SHORT = 2;
@@ -128,6 +127,8 @@ public class DexFileReader implements BaseDexFileReader {
     final int method_ids_size;
     final private int class_defs_size;
 
+    public final int javaVersion;
+
     /**
      * read dex from a {@link ByteBuffer}.
      * 
@@ -137,16 +138,21 @@ public class DexFileReader implements BaseDexFileReader {
         in.position(0);
         in = in.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN);
         int magic = in.getInt() & 0x00FFFFFF;
-        if (magic == MAGIC_DEX) {
-            ;
-        } else if (magic == MAGIC_ODEX) {
+        if (magic == MAGIC_ODEX) {
             throw new DexException("Not support odex");
-        } else {
+        } else if (magic != MAGIC_DEX) {
             throw new DexException("not support magic.");
         }
-        int version = in.getInt() & 0x00FFFFFF;
-        if (version != MAGIC_035 && version != MAGIC_036 && version != MAGIC_037) {
-            throw new DexException("not support version: " + version);
+
+        int version = Integer.reverseBytes(in.getInt());
+        if (version == MAGIC_037) {
+            javaVersion = 52; // java 8
+        } else {
+            javaVersion = 50;
+            if (version < MAGIC_035 || version > MAGIC_037) {
+                System.err.println("Unknown dex version " + version);
+                //throw new DexException("not support version: " + version);
+            }
         }
 
         // skip uint checksum

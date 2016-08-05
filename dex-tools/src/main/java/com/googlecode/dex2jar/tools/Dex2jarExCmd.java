@@ -46,22 +46,27 @@ import com.googlecode.d2j.reader.DexFileReader;
 import com.googlecode.d2j.util.zip.ZipEntry;
 import com.googlecode.d2j.util.zip.ZipFile;
 
-@BaseCmd.Syntax(cmd = "d2j-ex-dex2jar", syntax = "[options] <file0> [file1 ... fileN]", desc = "convert dex to jar")
+@BaseCmd.Syntax(cmd = "d2j-ex-dex2jar",
+        syntax = "[options] <file0> [file1 ... fileN]", desc = "convert dex to jar")
 public class Dex2jarExCmd extends BaseCmd {
     public static void main(String... args) {
         new Dex2jarExCmd().doMain(args);
     }
 
-    @Opt(opt = "mt", longOpt = "multi-thread", description = "concurrent process, default is 4 thread")
+    @Opt(opt = "mt", longOpt = "multi-thread",
+            description = "concurrent process, default is 4 thread")
     private int multiThread = 4;
 
-    @Opt(opt = "fl", longOpt = "file-list", description = "a file contains a list of dex to process")
+    @Opt(opt = "fl", longOpt = "file-list",
+            description = "a file contains a list of dex to process")
     private Path fileList;
 
-    @Opt(opt = "o", longOpt = "output", description = "output .jar file, default is $current_dir/[file-name]-dex2jar.jar", argName = "out-jar-file")
+    @Opt(opt = "o", longOpt = "output",
+            description = "output .jar file, default is $current_dir/[file-name]-dex2jar.jar", argName = "out-jar-file")
     private Path output;
 
-    @Opt(opt = "oc", longOpt = "only-clinit", hasArg = false, description = "only output class skeleton")
+    @Opt(opt = "oc", longOpt = "only-clinit", hasArg = false,
+            description = "only output class skeleton")
     private boolean onlyClinit = false;
 
     private int readerConfig;
@@ -110,27 +115,41 @@ public class Dex2jarExCmd extends BaseCmd {
         String baseName = getBaseName(input.toPath());
         Path currentDir = input.getParentFile().toPath();
         Path file = output == null ? currentDir.resolve(baseName + "-dex2jar.jar") : output;
-        final Path errorFile = currentDir.resolve(baseName + "-error.zip");
         System.out.println("dex2jar " + fileName + " -> " + file);
+
+        final Path errorFile = currentDir.resolve(baseName + "-error.zip");
         final BaksmaliBaseDexExceptionHandler exceptionHandler = new BaksmaliBaseDexExceptionHandler();
         DexFileNode fileNode = new DexFileNode();
         List<byte[]> dexData = readMultipleDex(new File(fileName).toPath());
-        for (byte[] dexBytes : dexData) {
-            DexFileReader reader = new DexFileReader(dexBytes);
+
+        int maxVersion = -1;
+        for (byte[] aDexData : dexData) {
+            DexFileReader reader = new DexFileReader(aDexData);
+            if (reader.javaVersion > maxVersion) {
+                maxVersion = reader.javaVersion;
+            }
             try {
-                reader.accept(fileNode, readerConfig | DexFileReader.SKIP_DEBUG | DexFileReader.IGNORE_READ_EXCEPTION);
+                reader.accept(fileNode, readerConfig | DexFileReader.SKIP_DEBUG
+                        | DexFileReader.IGNORE_READ_EXCEPTION);
             } catch (Exception ex) {
                 exceptionHandler.handleFileException(ex);
                 throw ex;
             }
         }
-        file.toFile().createNewFile();
+
         final FileSystem fs = createZip(file);
         final Path dist = fs.getPath("/");
+        final int javaVersion = maxVersion;
         ClassVisitorFactory cvf = new ClassVisitorFactory() {
             @Override
             public ClassVisitor create(final String name) {
                 return new ClassVisitor(Opcodes.ASM4, new ClassWriter(ClassWriter.COMPUTE_MAXS)) {
+                    @Override
+                    public void visit(int version, int access, String name, String signature,
+                                      String superName, String[] interfaces) {
+                        super.visit(javaVersion, access, name, signature, superName, interfaces);
+                    }
+
                     @Override
                     public void visitEnd() {
                         super.visitEnd();
@@ -140,7 +159,7 @@ public class Dex2jarExCmd extends BaseCmd {
                         try {
                             data = cw.toByteArray();
                         } catch (Exception ex) {
-                            System.err.println(String.format("ASM fail to generate .class file: %s", name));
+                            System.err.println("ASM fail to generate .class file: " + name);
                             exceptionHandler.handleFileException(ex);
                             return;
                         }
@@ -181,9 +200,10 @@ public class Dex2jarExCmd extends BaseCmd {
                                     e.printStackTrace();
                                 }
                             }
-                            BaksmaliBaseDexExceptionHandler exceptionHandler1 = (BaksmaliBaseDexExceptionHandler) exceptionHandler;
-                            if (exceptionHandler1.hasException()) {
-                                exceptionHandler1.dump(errorFile, new String[0]);
+                            BaksmaliBaseDexExceptionHandler exHandler =
+                                    (BaksmaliBaseDexExceptionHandler) exceptionHandler;
+                            if (exHandler.hasException()) {
+                                exHandler.dump(errorFile, new String[0]);
                             }
                             try {
                                 fs.close();
