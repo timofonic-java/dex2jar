@@ -106,7 +106,9 @@ public class DexFix {
         }
 
         for (DexFieldNode fn : staticPrimitiveFields.values()) {
-            fn.cst = getDefaultValueOfPrimitive(fn.field.getType().charAt(0));
+            if (fn.cst == null) {
+                fn.cst = getDefaultValueOfPrimitive(fn.field.getType().charAt(0));
+            }
         }
 
     }
@@ -131,8 +133,6 @@ public class DexFix {
                 return 0.0;
             default:
                 return null;
-            // impossible
         }
     }
-
 }
