@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ByteBuffer {
+public class ProfiledByteBuffer {
 
     ////////////////////////PROFILING CODE////////////////////////
 
@@ -108,15 +108,15 @@ public class ByteBuffer {
 
     //public static int count = 0;
 
-    public ByteBuffer(java.nio.ByteBuffer innerByteBuffer) {
+    public ProfiledByteBuffer(java.nio.ByteBuffer innerByteBuffer) {
         this.innerByteBuffer = innerByteBuffer;
     }
 
-    public ByteBuffer duplicate() {
-        return new ByteBuffer(innerByteBuffer.duplicate());
+    public ProfiledByteBuffer duplicate() {
+        return new ProfiledByteBuffer(innerByteBuffer.duplicate());
     }
 
-    public final ByteBuffer position(int newPosition) {
+    public final ProfiledByteBuffer position(int newPosition) {
         innerByteBuffer.position(newPosition);
         return this;
     }
@@ -139,17 +139,17 @@ public class ByteBuffer {
         return innerByteBuffer.getInt(index);
     }
 
-    public ByteBuffer asReadOnlyBuffer() {
-        return new ByteBuffer(innerByteBuffer.asReadOnlyBuffer());
+    public ProfiledByteBuffer asReadOnlyBuffer() {
+        return new ProfiledByteBuffer(innerByteBuffer.asReadOnlyBuffer());
     }
 
-    public final ByteBuffer order(ByteOrder bo) {
+    public final ProfiledByteBuffer order(ByteOrder bo) {
         innerByteBuffer.order(bo);
         return this;
     }
 
-    public ByteBuffer slice() {
-        return new ByteBuffer(innerByteBuffer.slice());
+    public ProfiledByteBuffer slice() {
+        return new ProfiledByteBuffer(innerByteBuffer.slice());
     }
 
     public final void limit(int a) {
@@ -161,7 +161,7 @@ public class ByteBuffer {
         return innerByteBuffer.get();
     }
 
-    public ByteBuffer get(byte[] data) {
+    public ProfiledByteBuffer get(byte[] data) {
         incrementProfile(position(), data.length);
         innerByteBuffer.get(data);
         return this;
@@ -175,7 +175,7 @@ public class ByteBuffer {
         int position = innerByteBuffer.position();
         String str = Mutf8.decode(innerByteBuffer, sb);
         int position2 = innerByteBuffer.position();
-        ByteBuffer.color(new SizeAndLocation(position, position2 - position));
+        ProfiledByteBuffer.color(new SizeAndLocation(position, position2 - position));
         incrementProfile(position(), position2 - position);
         return str;
     }

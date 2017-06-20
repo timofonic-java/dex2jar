@@ -130,22 +130,22 @@ public class DexFileReader implements BaseDexFileReader {
     private static final int VALUE_ANNOTATION = 29;
     private static final int VALUE_NULL = 30;
     private static final int VALUE_BOOLEAN = 31;
-    final ByteBuffer annotationSetRefListIn;
-    final ByteBuffer annotationsDirectoryItemIn;
-    final ByteBuffer annotationSetItemIn;
-    final ByteBuffer annotationItemIn;
-    final ByteBuffer classDataIn;
-    final ByteBuffer codeItemIn;
-    final ByteBuffer encodedArrayItemIn;
-    final ByteBuffer stringIdIn;
-    final ByteBuffer typeIdIn;
-    final ByteBuffer protoIdIn;
-    final ByteBuffer fieldIdIn;
-    final ByteBuffer methoIdIn;
-    final ByteBuffer classDefIn;
-    final ByteBuffer typeListIn;
-    final ByteBuffer stringDataIn;
-    final ByteBuffer debugInfoIn;
+    final ProfiledByteBuffer annotationSetRefListIn;
+    final ProfiledByteBuffer annotationsDirectoryItemIn;
+    final ProfiledByteBuffer annotationSetItemIn;
+    final ProfiledByteBuffer annotationItemIn;
+    final ProfiledByteBuffer classDataIn;
+    final ProfiledByteBuffer codeItemIn;
+    final ProfiledByteBuffer encodedArrayItemIn;
+    final ProfiledByteBuffer stringIdIn;
+    final ProfiledByteBuffer typeIdIn;
+    final ProfiledByteBuffer protoIdIn;
+    final ProfiledByteBuffer fieldIdIn;
+    final ProfiledByteBuffer methoIdIn;
+    final ProfiledByteBuffer classDefIn;
+    final ProfiledByteBuffer typeListIn;
+    final ProfiledByteBuffer stringDataIn;
+    final ProfiledByteBuffer debugInfoIn;
     final int string_ids_size;
     final int type_ids_size;
     final int field_ids_size;
@@ -153,15 +153,15 @@ public class DexFileReader implements BaseDexFileReader {
     final private int class_defs_size;
 
     public DexFileReader(java.nio.ByteBuffer bu) {
-        this(new ByteBuffer(bu));
+        this(new ProfiledByteBuffer(bu));
     }
 
     /**
-     * read dex from a {@link ByteBuffer}.
+     * read dex from a {@link ProfiledByteBuffer}.
      *
      * @param in
      */
-    public DexFileReader(ByteBuffer in) {
+    public DexFileReader(ProfiledByteBuffer in) {
         in.position(0);
         in = in.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN);
         int magic = in.getInt() & 0x00FFFFFF;
@@ -237,7 +237,7 @@ public class DexFileReader implements BaseDexFileReader {
      * @return
      */
     public DexFileReader(byte[] data) {
-        this(new ByteBuffer(java.nio.ByteBuffer.wrap(data)));
+        this(new ProfiledByteBuffer(java.nio.ByteBuffer.wrap(data)));
     }
 
     /**
@@ -262,7 +262,7 @@ public class DexFileReader implements BaseDexFileReader {
      *
      * @return index into file's string ids table, -1 means null
      */
-    private static int readStringIndex(ByteBuffer bs) {
+    private static int readStringIndex(ProfiledByteBuffer bs) {
         int offsetIndex = readULeb128i(bs);
         return offsetIndex - 1;
     }
@@ -276,15 +276,15 @@ public class DexFileReader implements BaseDexFileReader {
         return out.toByteArray();
     }
 
-    private static ByteBuffer slice(ByteBuffer in, int offset, int length) {
+    private static ProfiledByteBuffer slice(ProfiledByteBuffer in, int offset, int length) {
         in.position(offset);
-        ByteBuffer b = in.slice();
+        ProfiledByteBuffer b = in.slice();
         b.limit(length);
         b.order(ByteOrder.LITTLE_ENDIAN);
         return b;
     }
 
-    private static void skip(ByteBuffer in, int bytes) {
+    private static void skip(ProfiledByteBuffer in, int bytes) {
         in.position(in.position() + bytes);
     }
 
@@ -308,7 +308,7 @@ public class DexFileReader implements BaseDexFileReader {
         }
     }
 
-    private static long readIntBits(ByteBuffer in, int before) {
+    private static long readIntBits(ProfiledByteBuffer in, int before) {
         int length = ((before >> 5) & 0x7) + 1;
         long value = 0;
         for (int j = 0; j < length; j++) {
@@ -318,7 +318,7 @@ public class DexFileReader implements BaseDexFileReader {
         return value << shift >> shift;
     }
 
-    private static long readUIntBits(ByteBuffer in, int before) {
+    private static long readUIntBits(ProfiledByteBuffer in, int before) {
         int length = ((before >> 5) & 0x7) + 1;
         long value = 0;
         for (int j = 0; j < length; j++) {
@@ -327,7 +327,7 @@ public class DexFileReader implements BaseDexFileReader {
         return value;
     }
 
-    private static long readFloatBits(ByteBuffer in, int before) {
+    private static long readFloatBits(ProfiledByteBuffer in, int before) {
         int bytes = ((before >> 5) & 0x7) + 1;
         long result = 0L;
         for (int i = 0; i < bytes; ++i) {
@@ -372,7 +372,7 @@ public class DexFileReader implements BaseDexFileReader {
         }
     }
 
-    public static int readULeb128i(ByteBuffer in) {
+    public static int readULeb128i(ProfiledByteBuffer in) {
         int value = 0;
         int count = 0;
         int b = in.get();
@@ -385,7 +385,7 @@ public class DexFileReader implements BaseDexFileReader {
         return value;
     }
 
-    public static int readLeb128i(ByteBuffer in) {
+    public static int readLeb128i(ProfiledByteBuffer in) {
         int bitpos = 0;
         int vln = 0;
         do {
@@ -409,7 +409,7 @@ public class DexFileReader implements BaseDexFileReader {
     private void read_debug_info(
             int offset, int regSize, boolean isStatic, Method method,
             Map<Integer, DexLabel> labelMap, DexDebugVisitor dcv) {
-        ByteBuffer in = debugInfoIn;
+        ProfiledByteBuffer in = debugInfoIn;
         in.position(offset);
         int address = 0;
         int line = readULeb128i(in);
@@ -572,7 +572,7 @@ public class DexFileReader implements BaseDexFileReader {
     @Override
     public List<String> getClassNames() {
         List<String> names = new ArrayList<>(class_defs_size);
-        ByteBuffer in = classDefIn;
+        ProfiledByteBuffer in = classDefIn;
         for (int cid = 0; cid < class_defs_size; cid++) {
             in.position(cid * 32);
             String className = this.getType(in.getInt());
@@ -594,8 +594,8 @@ public class DexFileReader implements BaseDexFileReader {
             accept(dv, cid, config);
         }
         dv.visitEnd();
-        ByteBuffer.print("header");
-        ByteBuffer.getTotalColoring();
+        ProfiledByteBuffer.print("header");
+        ProfiledByteBuffer.getTotalColoring();
     }
 
     static boolean a = false;
@@ -622,7 +622,7 @@ public class DexFileReader implements BaseDexFileReader {
         int static_values_off = classDefIn.getInt();
 
         String className = getType(class_idx);
-        ByteBuffer.setClass(className); // Technically attributing the header to the wrong class. But shouldn't matter.
+        ProfiledByteBuffer.setClass(className); // Technically attributing the header to the wrong class. But shouldn't matter.
         if (ignoreClass(className)) { return; }
         String superClassName = getType(superclass_idx);
         String[] interfaceNames = getTypeList(interfaces_off);
@@ -642,14 +642,14 @@ public class DexFileReader implements BaseDexFileReader {
             }
         }
 
-        ByteBuffer.print(className);
+        ProfiledByteBuffer.print(className);
     }
 
     public Boolean ignoreClass(String className) {
         return false;
     }
 
-    private Object readEncodedValue(ByteBuffer in) {
+    private Object readEncodedValue(ProfiledByteBuffer in) {
         int b = 0xFF & in.get();
         int type = b & 0x1f;
         switch (type) {
@@ -770,7 +770,7 @@ public class DexFileReader implements BaseDexFileReader {
         }
 
         if (class_data_off != 0) {
-            ByteBuffer in = classDataIn;
+            ProfiledByteBuffer in = classDataIn;
             in.position(class_data_off);
 
             int static_fields = (int) readULeb128i(in);
@@ -822,7 +822,7 @@ public class DexFileReader implements BaseDexFileReader {
         return read_encoded_array(encodedArrayItemIn);
     }
 
-    private Object[] read_encoded_array(ByteBuffer in) {
+    private Object[] read_encoded_array(ProfiledByteBuffer in) {
         int size = readULeb128i(in);
         Object[] constant = new Object[size];
         for (int i = 0; i < size; i++) {
@@ -832,7 +832,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private void read_annotation_set_item(int offset, DexAnnotationAble daa) { // annotation_set_item
-        ByteBuffer in = annotationSetItemIn;
+        ProfiledByteBuffer in = annotationSetItemIn;
         in.position(offset);
         int size = in.getInt();
         for (int j = 0; j < size; j++) {
@@ -842,7 +842,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private void read_annotation_item(int annotation_off, DexAnnotationAble daa) {
-        ByteBuffer in = annotationItemIn;
+        ProfiledByteBuffer in = annotationItemIn;
         in.position(annotation_off);
         int visibility = 0xFF & in.get();
         DexAnnotationNode annotation = read_encoded_annotation(in);
@@ -850,7 +850,7 @@ public class DexFileReader implements BaseDexFileReader {
         annotation.accept(daa);
     }
 
-    private DexAnnotationNode read_encoded_annotation(ByteBuffer in) {
+    private DexAnnotationNode read_encoded_annotation(ProfiledByteBuffer in) {
         int type_idx = readULeb128i(in);
         int size = readULeb128i(in);
         String _typeString = getType(type_idx);
@@ -930,7 +930,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private int acceptField(
-            ByteBuffer in, int lastIndex, DexClassVisitor dcv,
+            ProfiledByteBuffer in, int lastIndex, DexClassVisitor dcv,
             Map<Integer, Integer> fieldAnnotationPositions, Object value, int config) {
         int diff = (int) readULeb128i(in);
         int field_access_flags = (int) readULeb128i(in);
@@ -956,7 +956,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private int acceptMethod(
-            ByteBuffer in, int lastIndex, DexClassVisitor cv, Map<Integer, Integer> methodAnnos,
+            ProfiledByteBuffer in, int lastIndex, DexClassVisitor cv, Map<Integer, Integer> methodAnnos,
             Map<Integer, Integer> parameterAnnos, int config, boolean firstMethod) {
         int offset = in.position();
         int diff = (int) readULeb128i(in);
@@ -1030,7 +1030,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private void read_annotation_set_ref_list(int parameter_annotation_offset, DexMethodVisitor dmv) {
-        ByteBuffer in = annotationSetRefListIn;
+        ProfiledByteBuffer in = annotationSetRefListIn;
         in.position(parameter_annotation_offset);
 
         int size = in.getInt();
@@ -1273,10 +1273,10 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private void findTryCatch(
-            ByteBuffer in, DexCodeVisitor dcv, int tries_size, int insn_size,
+            ProfiledByteBuffer in, DexCodeVisitor dcv, int tries_size, int insn_size,
             Map<Integer, DexLabel> labelsMap, Set<Integer> handlers) {
         int encoded_catch_handler_list = in.position() + tries_size * 8;
-        ByteBuffer handlerIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        ProfiledByteBuffer handlerIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
         for (int i = 0; i < tries_size; i++) { // try_item
             int start_addr = in.getInt();
             int insn_count = 0xFFFF & in.getShort();
@@ -1319,7 +1319,7 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     /* package */void acceptCode(int code_off, DexCodeVisitor dcv, int config, boolean isStatic, Method method) {
-        ByteBuffer in = codeItemIn;
+        ProfiledByteBuffer in = codeItemIn;
         in.position(code_off);
         int registers_size = 0xFFFF & in.getShort();
         in.getShort();// ins_size ushort
