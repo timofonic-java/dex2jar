@@ -1,16 +1,8 @@
-This is a fork of dex2jar. Additional code has been added to determine the size breakdown per class.
+## Build Process 
 
-#dex2jar [![Build Status](https://travis-ci.org/pxb1988/dex2jar.svg?branch=2.x)](https://travis-ci.org/pxb1988/dex2jar)
-Tools to work with android .dex and java .class files
+This is a fork of [dex2jar](https://github.com/pxb1988/dex2jar). Additional code has been added to determine the size breakdown per class. 
 
-1. dex-reader/writer:
-    Read/write the Dalvik Executable (.dex) file. It has a [light weight API similar with ASM](https://sourceforge.net/p/dex2jar/wiki/Faq#markdown-header-want-to-read-dex-file-using-dex2jar).
-2. d2j-dex2jar:
-    Convert .dex file to .class files (zipped as jar)
-3. smali/baksmali:
-    disassemble dex to smali files and assemble dex from smali files. different implementation to [smali/baksmali](http://code.google.com/p/smali), same syntax, but we support escape in type desc "Lcom/dex2jar\t\u1234;"
-4. other tools:
-    [d2j-decrypt-string](https://sourceforge.net/p/dex2jar/wiki/DecryptStrings)
+Run dex2jar normally in order to convert an apk into jar files. During the transformation, additional profiling code determines which parts of the dex file are read from in order to create each class in the jar. This is a naive approach and correspondly slow. My hope is that its naivity makes it bulletproof.
 
 ## Usage
 
