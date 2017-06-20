@@ -594,8 +594,8 @@ public class DexFileReader implements BaseDexFileReader {
             accept(dv, cid, config);
         }
         dv.visitEnd();
-        ProfiledByteBuffer.print("header");
         ProfiledByteBuffer.getTotalColoring();
+        ProfiledByteBuffer.clear();
     }
 
     static boolean a = false;

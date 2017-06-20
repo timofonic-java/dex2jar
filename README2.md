@@ -31,3 +31,7 @@ My ultimiate goal is to find the size of each class file:
 OTHER THINGS I'M LOOKING INTO:
 * just directly dump the class files and look at the sizes in there...
 * https://github.com/JesusFreke/smali
+
+RESULTS:
+* with multicoloring I get 1.4MB
+* with regular coloring: 1.8MB

@@ -11,9 +11,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import javafx.util.Pair;
+
 public class ProfiledByteBuffer {
 
-    ////////////////////////PROFILING CODE////////////////////////
+    ////////////////////////INACCURATE, BUT FAST, PROFILING CODE////////////////////////
 
     class SizeAndLocation {
         int size;
@@ -43,9 +45,6 @@ public class ProfiledByteBuffer {
         }
     }
 
-    // technically this double counts some things.... if you have an access (1,20) and (1,5) then the (1,5) should be
-    // subsumed.
-
     private java.nio.ByteBuffer innerByteBuffer;
     static Multimap<String, SizeAndLocation> memoryAccesses = HashMultimap.create();
     static Map<SizeAndLocation, Integer> countSize = new HashMap<>();
@@ -69,44 +68,98 @@ public class ProfiledByteBuffer {
     public static void setClass(String clazz) {
         currentClass = clazz;
     }
-    public static void print(String className) {
+    public static double print(String className) {
+        if (true) {
+            return 0;
+        }
         double count = 0;
         for (SizeAndLocation sizeAndLocation : memoryAccesses.get(className)) {
             count += (double) sizeAndLocation.size / countSize.get(sizeAndLocation);
         }
         System.out.println(count + ", " + className);
         memoryAccesses.removeAll(className);
+        return count;
     }
 
     ////////////////////////PROFILING CODE////////////////////////
 
+
     static ArrayList<String> colorBuffer[] = new ArrayList[10000000];
+    static ArrayList<Pair<String, Long>> multiColoring[] = new ArrayList[10000000];
     public static void color(SizeAndLocation sizeAndLocation) {
         for (int i = sizeAndLocation.location; i < sizeAndLocation.size + sizeAndLocation.location; i++) {
             if (colorBuffer[i] == null) {
                 colorBuffer[i] = Lists.newArrayList();
             }
-            //colorBuffer[i].add(currentClass);
-        }
-    }
-    public static int getTotalColoring() {
-        int count = 0;
-        for (ArrayList<String> strings : colorBuffer) {
-            if (strings != null) {
-                count++;
-                System.out.println("1");
-
-            } else {
-                System.out.println("0");
+            // optimization. if more than six. who cares who owns it.
+            if (colorBuffer[i].size() < 6) {
+                colorBuffer[i].add(currentClass);
             }
         }
-        System.out.println("Total coloring: " + count);
-        return count;
+    }
+    /**
+     * Less accurate than {link @color} but faster. If overlaps happen the attribution can be significantly wrong.
+     * As a result this is currently unused.
+     * @param sizeAndLocation
+     */
+    public static void multiColor(SizeAndLocation sizeAndLocation) {
+        if (multiColoring[sizeAndLocation.location] == null) {
+            multiColoring[sizeAndLocation.location] = new ArrayList<>();
+        }
+        multiColoring[sizeAndLocation.location].add(new Pair<>(currentClass, (long) sizeAndLocation.size));
+    }
+    public static double getTotalColoring() {
+        double total = 0;
+        HashMap<String, Double> classCounts = new HashMap<>();
+        for (ArrayList<String> classNames : colorBuffer) {
+            if (classNames == null) {
+                continue;
+            }
+            for (String className : classNames) {
+                double increment = 1.0 / classNames.size();
+                if (classCounts.containsKey(className)) {
+                    classCounts.put(className, classCounts.get(className) + increment);
+                } else {
+                    classCounts.put(className, increment);
+                }
+                total += increment;
+            }
+        }
+        for (ArrayList<Pair<String, Long>> pairs : multiColoring) {
+            if (pairs == null) {
+                continue;
+            }
+            double increment = 1.0 / pairs.size();
+            for (Pair<String, Long> pair : pairs) {
+                String className = pair.getKey();
+                if (classCounts.containsKey(className)) {
+                    classCounts.put(className, classCounts.get(className) + increment);
+                } else {
+                    classCounts.put(className, increment);
+                }
+                total += increment;
+            }
+        }
+        for (String s : classCounts.keySet()) {
+            System.out.println(classCounts.get(s) + ", " + s);
+        }
+        System.err.println("Total coloring = " + total);
+        return total;
     }
 
-    ////////////////////////PROFILING CODE #2////////////////////////
+    public static void clear() {
+        memoryAccesses.clear();
+        countSize.clear();
+        locations.clear();
+        currentClass = "header";
+    }
 
-    //public static int count = 0;
+    ////////////////////////ACCURATE BUT IN-EFFICIENT PROFILING CODE #2////////////////////////
+    // Colors every single byte in the dex file by the classes that depended on these bytes.
+    // After done converting the dex to class files, we check every byte in the colored array to
+    // determine which classes have ownership of which bytes.
+    //
+    // This is particularly slow for the string portions.
 
     public ProfiledByteBuffer(java.nio.ByteBuffer innerByteBuffer) {
         this.innerByteBuffer = innerByteBuffer;
@@ -123,18 +176,15 @@ public class ProfiledByteBuffer {
 
     public short getShort() {
         incrementProfile(position(), 2);
-        //System.out.println("getShort()");
         return innerByteBuffer.getShort();
     }
 
     public int getInt() {
-        //System.out.println("getInt()");
         incrementProfile(position(), 4);
         return innerByteBuffer.getInt();
     }
 
     public int getInt(int index) {
-        //System.out.println("getInt()");
         incrementProfile(index, 4);
         return innerByteBuffer.getInt(index);
     }

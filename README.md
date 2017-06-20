@@ -1,12 +1,4 @@
-**Project move to [SourceForge](https://sourceforge.net/p/dex2jar) and [Bitbucket](https://bitbucket.org/pxb1988/dex2jar) and [Github](https://github.com/pxb1988/dex2jar)**
-
-| _ | Mirror | Wiki | Downloads | Issues |
-|--:|:-----|:----:|:---------:|:------:|
-| sf | https://sourceforge.net/p/dex2jar | [Wiki](https://sourceforge.net/p/dex2jar/wiki) | [Downloads](https://sourceforge.net/projects/dex2jar/files/) | [Tickets](https://sourceforge.net/p/dex2jar/tickets/) |
-| bb | https://bitbucket.org/pxb1988/dex2jar | [Wiki](https://bitbucket.org/pxb1988/dex2jar/wiki) | [Downloads](https://bitbucket.org/pxb1988/dex2jar/downloads) | [Issues](https://bitbucket.org/pxb1988/dex2jar/issues) |
-| gh | https://github.com/pxb1988/dex2jar | [Wiki](https://github.com/pxb1988/dex2jar/wiki) | [Releases](https://github.com/pxb1988/dex2jar/releases) | [Issues](https://github.com/pxb1988/dex2jar/issues) |
-| gc | https://code.google.com/p/dex2jar | [old](http://code.google.com/p/dex2jar/w/list) | [old](http://code.google.com/p/dex2jar/downloads/list) | [old](http://code.google.com/p/dex2jar/issues/list)|
-
+This is a fork of dex2jar. Additional code has been added to determine the size breakdown per class.
 
 #dex2jar [![Build Status](https://travis-ci.org/pxb1988/dex2jar.svg?branch=2.x)](https://travis-ci.org/pxb1988/dex2jar)
 Tools to work with android .dex and java .class files
@@ -22,33 +14,17 @@ Tools to work with android .dex and java .class files
 
 ## Usage
 
-> sh d2j-dex2jar.sh -f ~/path/to/apk_to_decompile.apk
+> sh d2j-dex2jar.sh -f ~/path/to/apk_to_decompile.apk > output.txt
 
-And the output file will be `apk_to_decompile-dex2jar.jar`.
+The jar file will be `apk_to_decompile-dex2jar.jar`.
+And the analytics about class size will be inside `output.txt`.
 
 ## Build Process 
-
-By Maven
-
-```
-cd dex2jar-2.x
-mvn clean package
-# if build successfull, the zip file is under dex-tools/target/
-```
-
-By Gradle
 
 ```
 cd dex2jar-2.x
 gradle clean distZip
 # if build successfull, the zip file is under dex-tools/build/distributions/
+# unzip by calling the following
+open dex-tools/build/distributions/dex-tools-2.1-SNAPSHOT.zip
 ```
-
-## Need help ?
-send email to dex2jar@googlegroups.com 
-
-or post on issue trackers list above.
-
-## License
-[Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0.html)
-

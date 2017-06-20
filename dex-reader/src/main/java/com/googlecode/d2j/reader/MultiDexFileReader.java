@@ -93,13 +93,20 @@ public class MultiDexFileReader implements BaseDexFileReader {
     @Override
     public void accept(DexFileVisitor dv, int config) {
         int size = items.size();
+        DexFileReader lastReader = null;
         for (int i = 0; i < size; i++) {
+            if (lastReader != items.get(i).reader) {
+                lastReader = items.get(i).reader;
+                System.err.println("Done dex");
+                ProfiledByteBuffer.getTotalColoring();
+                ProfiledByteBuffer.clear();
+            }
             accept(dv, i, config);
         }
-        ProfiledByteBuffer.print("header");
+
+        System.err.println("Done all");
         ProfiledByteBuffer.getTotalColoring();
-        System.err.println("Done dex");
-        System.out.println("Done dex");
+        ProfiledByteBuffer.clear();
     }
 
     @Override
