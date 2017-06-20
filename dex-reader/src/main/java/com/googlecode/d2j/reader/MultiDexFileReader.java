@@ -96,6 +96,10 @@ public class MultiDexFileReader implements BaseDexFileReader {
         for (int i = 0; i < size; i++) {
             accept(dv, i, config);
         }
+        ByteBuffer.print("header");
+        ByteBuffer.getTotalColoring();
+        System.err.println("Done dex");
+        System.out.println("Done dex");
     }
 
     @Override

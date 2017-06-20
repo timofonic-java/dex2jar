@@ -15,31 +15,56 @@
  */
 package com.googlecode.d2j.reader;
 
-import java.io.*;
-import java.nio.ByteBuffer;
+import com.googlecode.d2j.DexConstants;
+import com.googlecode.d2j.DexException;
+import com.googlecode.d2j.DexLabel;
+import com.googlecode.d2j.DexType;
+import com.googlecode.d2j.Field;
+import com.googlecode.d2j.Method;
+import com.googlecode.d2j.Visibility;
+import com.googlecode.d2j.node.DexAnnotationNode;
+import com.googlecode.d2j.visitors.DexAnnotationAble;
+import com.googlecode.d2j.visitors.DexClassVisitor;
+import com.googlecode.d2j.visitors.DexCodeVisitor;
+import com.googlecode.d2j.visitors.DexDebugVisitor;
+import com.googlecode.d2j.visitors.DexFieldVisitor;
+import com.googlecode.d2j.visitors.DexFileVisitor;
+import com.googlecode.d2j.visitors.DexMethodVisitor;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UTFDataFormatException;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
-
-import com.googlecode.d2j.*;
-import com.googlecode.d2j.node.DexAnnotationNode;
-import com.googlecode.d2j.util.Mutf8;
-import com.googlecode.d2j.visitors.*;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Open and read a dex file.this is the entrance of dex-reader. to read a dex/odex, use the following code:
- * 
+ *
  * <pre>
  * DexFileVisitor visitor = new xxxFileVisitor();
  * DexFileReader reader = new DexFileReader(dexFile);
  * reader.accept(visitor);
  * </pre>
- * 
+ *
  * @author <a href="mailto:pxb1988@gmail.com">Panxiaobo</a>
  * @version $Rev$
  */
 public class DexFileReader implements BaseDexFileReader {
+
     /**
      * skip debug infos in dex file.
      */
@@ -47,15 +72,15 @@ public class DexFileReader implements BaseDexFileReader {
     /**
      * skip code info in dex file, this indicate {@link #SKIP_DEBUG}
      */
-    public static final int SKIP_CODE = 1 << 2;
+    public static final int SKIP_CODE = 0 << 2;
     /**
      * skip annotation info in dex file.
      */
-    public static final int SKIP_ANNOTATION = 1 << 3;
+    public static final int SKIP_ANNOTATION = 0 << 3;
     /**
      * skip field constant in dex file.
      */
-    public static final int SKIP_FIELD_CONSTANT = 1 << 4;
+    public static final int SKIP_FIELD_CONSTANT = 0 << 4;
     /**
      * ingore read exception
      */
@@ -127,9 +152,13 @@ public class DexFileReader implements BaseDexFileReader {
     final int method_ids_size;
     final private int class_defs_size;
 
+    public DexFileReader(java.nio.ByteBuffer bu) {
+        this(new ByteBuffer(bu));
+    }
+
     /**
      * read dex from a {@link ByteBuffer}.
-     * 
+     *
      * @param in
      */
     public DexFileReader(ByteBuffer in) {
@@ -159,10 +188,11 @@ public class DexFileReader implements BaseDexFileReader {
             throw new DexException("not support endian_tag");
         }
 
-        // skip uint link_size
-        // and uint link_off
-        // and uint map_off
-        skip(in, 4 + 4 + 4);
+        // do NOT skip uint link_size
+        int link_size = in.getInt();
+        System.out.println("link size: " + link_size);
+        int link_off = in.getInt();
+        int map_off = in.getInt();
 
         string_ids_size = in.getInt();
         int string_ids_off = in.getInt();
@@ -176,7 +206,9 @@ public class DexFileReader implements BaseDexFileReader {
         int method_ids_off = in.getInt();
         class_defs_size = in.getInt();
         int class_defs_off = in.getInt();
-        // skip uint data_size data_off
+        int data_size = in.getInt();
+        int data_off = in.getInt();
+        int map_size = in.getInt(map_off); // tiny
 
         stringIdIn = slice(in, string_ids_off, string_ids_size * 4);
         typeIdIn = slice(in, type_ids_off, type_ids_size * 4);
@@ -196,22 +228,20 @@ public class DexFileReader implements BaseDexFileReader {
         encodedArrayItemIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
         typeListIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
         debugInfoIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
+
+        //new DirectByteBuffer2(codeItemIn.asReadOnlyBuffer())
     }
 
     /**
-     * 
-     * @param data
-     *            the byte array of dex
+     * @param data the byte array of dex
      * @return
      */
     public DexFileReader(byte[] data) {
-        this(ByteBuffer.wrap(data));
+        this(new ByteBuffer(java.nio.ByteBuffer.wrap(data)));
     }
 
     /**
-     * 
-     * @param file
-     *            the dex file
+     * @param file the dex file
      * @throws IOException
      */
     public DexFileReader(File file) throws IOException {
@@ -229,7 +259,7 @@ public class DexFileReader implements BaseDexFileReader {
     /**
      * Reads a string index. String indicies are offset by 1, and a 0 value in the stream (-1 as returned by this
      * method) means "null"
-     * 
+     *
      * @return index into file's string ids table, -1 means null
      */
     private static int readStringIndex(ByteBuffer bs) {
@@ -373,10 +403,11 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     private static void DEBUG_DEBUG(String fmt, Object... args) {
-        // System.out.println(String.format(fmt, args));
+        //System.out.println(String.format(fmt, args));
     }
 
-    private void read_debug_info(int offset, int regSize, boolean isStatic, Method method,
+    private void read_debug_info(
+            int offset, int regSize, boolean isStatic, Method method,
             Map<Integer, DexLabel> labelMap, DexDebugVisitor dcv) {
         ByteBuffer in = debugInfoIn;
         in.position(offset);
@@ -420,109 +451,109 @@ public class DexFileReader implements BaseDexFileReader {
             }
         }
 
-        for (;;) {
+        for (; ; ) {
             int opcode = in.get() & 0xff;
 
             switch (opcode) {
-            case DBG_START_LOCAL: {
-                int reg = readULeb128i(in);
-                int nameIdx = readStringIndex(in);
-                int typeIdx = readStringIndex(in);
-                String name = getString(nameIdx);
-                String type = getType(typeIdx);
-                DEBUG_DEBUG("Start: v%d :%s, %s", reg, name, type);
-                LocalEntry le = new LocalEntry(name, type);
-                lastEntryForReg[reg] = le;
-                order(labelMap, address);
-                dcv.visitStartLocal(reg, labelMap.get(address), name, type, null);
-            }
-                break;
-
-            case DBG_START_LOCAL_EXTENDED: {
-                int reg = readULeb128i(in);
-                int nameIdx = readStringIndex(in);
-                int typeIdx = readStringIndex(in);
-                int sigIdx = readStringIndex(in);
-                String name = getString(nameIdx);
-                String type = getType(typeIdx);
-                String signature = getString(sigIdx);
-                DEBUG_DEBUG("Start: v%d :%s, %s // %s", reg, name, type, signature);
-                LocalEntry le = new LocalEntry(name, type, signature);
-                order(labelMap, address);
-                dcv.visitStartLocal(reg, labelMap.get(address), name, type, signature);
-                lastEntryForReg[reg] = le;
-            }
-                break;
-
-            case DBG_RESTART_LOCAL: {
-                int reg = readULeb128i(in);
-                LocalEntry le = lastEntryForReg[reg];
-                if (le == null) {
-                    throw new RuntimeException("Encountered RESTART_LOCAL on new v" + reg);
+                case DBG_START_LOCAL: {
+                    int reg = readULeb128i(in);
+                    int nameIdx = readStringIndex(in);
+                    int typeIdx = readStringIndex(in);
+                    String name = getString(nameIdx);
+                    String type = getType(typeIdx);
+                    DEBUG_DEBUG("Start: v%d :%s, %s", reg, name, type);
+                    LocalEntry le = new LocalEntry(name, type);
+                    lastEntryForReg[reg] = le;
+                    order(labelMap, address);
+                    dcv.visitStartLocal(reg, labelMap.get(address), name, type, null);
                 }
-                if (le.signature == null) {
-                    DEBUG_DEBUG("Start: v%d :%s, %s", reg, le.name, le.type);
-                } else {
-                    DEBUG_DEBUG("Start: v%d :%s, %s // %s", reg, le.name, le.type, le.signature);
+                break;
+
+                case DBG_START_LOCAL_EXTENDED: {
+                    int reg = readULeb128i(in);
+                    int nameIdx = readStringIndex(in);
+                    int typeIdx = readStringIndex(in);
+                    int sigIdx = readStringIndex(in);
+                    String name = getString(nameIdx);
+                    String type = getType(typeIdx);
+                    String signature = getString(sigIdx);
+                    DEBUG_DEBUG("Start: v%d :%s, %s // %s", reg, name, type, signature);
+                    LocalEntry le = new LocalEntry(name, type, signature);
+                    order(labelMap, address);
+                    dcv.visitStartLocal(reg, labelMap.get(address), name, type, signature);
+                    lastEntryForReg[reg] = le;
                 }
-                order(labelMap, address);
-                dcv.visitRestartLocal(reg, labelMap.get(address));
-            }
                 break;
 
-            case DBG_END_LOCAL: {
-                int reg = readULeb128i(in);
-                LocalEntry le = lastEntryForReg[reg];
-                if (le == null) {
-                    throw new RuntimeException("Encountered RESTART_LOCAL on new v" + reg);
+                case DBG_RESTART_LOCAL: {
+                    int reg = readULeb128i(in);
+                    LocalEntry le = lastEntryForReg[reg];
+                    if (le == null) {
+                        throw new RuntimeException("Encountered RESTART_LOCAL on new v" + reg);
+                    }
+                    if (le.signature == null) {
+                        DEBUG_DEBUG("Start: v%d :%s, %s", reg, le.name, le.type);
+                    } else {
+                        DEBUG_DEBUG("Start: v%d :%s, %s // %s", reg, le.name, le.type, le.signature);
+                    }
+                    order(labelMap, address);
+                    dcv.visitRestartLocal(reg, labelMap.get(address));
                 }
-                if (le.signature == null) {
-                    DEBUG_DEBUG("End: v%d :%s, %s", reg, le.name, le.type);
-                } else {
-                    DEBUG_DEBUG("End: v%d :%s, %s // %s", reg, le.name, le.type, le.signature);
+                break;
+
+                case DBG_END_LOCAL: {
+                    int reg = readULeb128i(in);
+                    LocalEntry le = lastEntryForReg[reg];
+                    if (le == null) {
+                        throw new RuntimeException("Encountered RESTART_LOCAL on new v" + reg);
+                    }
+                    if (le.signature == null) {
+                        DEBUG_DEBUG("End: v%d :%s, %s", reg, le.name, le.type);
+                    } else {
+                        DEBUG_DEBUG("End: v%d :%s, %s // %s", reg, le.name, le.type, le.signature);
+                    }
+                    order(labelMap, address);
+                    dcv.visitEndLocal(reg, labelMap.get(address));
                 }
-                order(labelMap, address);
-                dcv.visitEndLocal(reg, labelMap.get(address));
-            }
                 break;
 
-            case DBG_END_SEQUENCE:
-                // all done
-                return;
+                case DBG_END_SEQUENCE:
+                    // all done
+                    return;
 
-            case DBG_ADVANCE_PC:
-                address += readULeb128i(in);
-                break;
+                case DBG_ADVANCE_PC:
+                    address += readULeb128i(in);
+                    break;
 
-            case DBG_ADVANCE_LINE:
-                line += readLeb128i(in);
-                break;
+                case DBG_ADVANCE_LINE:
+                    line += readLeb128i(in);
+                    break;
 
-            case DBG_SET_PROLOGUE_END:
-                order(labelMap, address);
-                dcv.visitPrologue(labelMap.get(address));
-                break;
-            case DBG_SET_EPILOGUE_BEGIN:
-                order(labelMap, address);
-                dcv.visitEpiogue(labelMap.get(address));
-                break;
-            case DBG_SET_FILE:
-                // skip
-                break;
+                case DBG_SET_PROLOGUE_END:
+                    order(labelMap, address);
+                    dcv.visitPrologue(labelMap.get(address));
+                    break;
+                case DBG_SET_EPILOGUE_BEGIN:
+                    order(labelMap, address);
+                    dcv.visitEpiogue(labelMap.get(address));
+                    break;
+                case DBG_SET_FILE:
+                    // skip
+                    break;
 
-            default:
-                if (opcode < DBG_FIRST_SPECIAL) {
-                    throw new RuntimeException("Invalid extended opcode encountered " + opcode);
-                }
+                default:
+                    if (opcode < DBG_FIRST_SPECIAL) {
+                        throw new RuntimeException("Invalid extended opcode encountered " + opcode);
+                    }
 
-                int adjopcode = opcode - DBG_FIRST_SPECIAL;
+                    int adjopcode = opcode - DBG_FIRST_SPECIAL;
 
-                address += adjopcode / DBG_LINE_RANGE;
-                line += DBG_LINE_BASE + (adjopcode % DBG_LINE_RANGE);
+                    address += adjopcode / DBG_LINE_RANGE;
+                    line += DBG_LINE_BASE + (adjopcode % DBG_LINE_RANGE);
 
-                order(labelMap, address);
-                dcv.visitLineNumber(line, labelMap.get(address));
-                break;
+                    order(labelMap, address);
+                    dcv.visitLineNumber(line, labelMap.get(address));
+                    break;
 
             }
         }
@@ -530,7 +561,7 @@ public class DexFileReader implements BaseDexFileReader {
 
     /**
      * equals to {@link #accept(DexFileVisitor, int)} with 0 as config
-     * 
+     *
      * @param dv
      */
     @Override
@@ -552,12 +583,10 @@ public class DexFileReader implements BaseDexFileReader {
 
     /**
      * Makes the given visitor visit the dex file.
-     * 
-     * @param dv
-     *            visitor
-     * @param config
-     *            config flags, {@link #SKIP_CODE}, {@link #SKIP_DEBUG}, {@link #SKIP_ANNOTATION},
-     *            {@link #SKIP_FIELD_CONSTANT}
+     *
+     * @param dv visitor
+     * @param config config flags, {@link #SKIP_CODE}, {@link #SKIP_DEBUG}, {@link #SKIP_ANNOTATION},
+     * {@link #SKIP_FIELD_CONSTANT}
      */
     @Override
     public void accept(DexFileVisitor dv, int config) {
@@ -565,19 +594,20 @@ public class DexFileReader implements BaseDexFileReader {
             accept(dv, cid, config);
         }
         dv.visitEnd();
+        ByteBuffer.print("header");
+        ByteBuffer.getTotalColoring();
     }
+
+    static boolean a = false;
 
     /**
      * Makes the given visitor visit the dex file. Notice the
      * {@link com.googlecode.d2j.visitors.DexFileVisitor#visitEnd()} is not called
-     * 
-     * @param dv
-     *            visitor
-     * @param classIdx
-     *            index of class_def
-     * @param config
-     *            config flags, {@link #SKIP_CODE}, {@link #SKIP_DEBUG}, {@link #SKIP_ANNOTATION},
-     *            {@link #SKIP_FIELD_CONSTANT}
+     *
+     * @param dv visitor
+     * @param classIdx index of class_def
+     * @param config config flags, {@link #SKIP_CODE}, {@link #SKIP_DEBUG}, {@link #SKIP_ANNOTATION},
+     * {@link #SKIP_FIELD_CONSTANT}
      */
     @Override
     public void accept(DexFileVisitor dv, int classIdx, int config) {
@@ -592,7 +622,8 @@ public class DexFileReader implements BaseDexFileReader {
         int static_values_off = classDefIn.getInt();
 
         String className = getType(class_idx);
-        if(ignoreClass(className)) return;
+        ByteBuffer.setClass(className); // Technically attributing the header to the wrong class. But shouldn't matter.
+        if (ignoreClass(className)) { return; }
         String superClassName = getType(superclass_idx);
         String[] interfaceNames = getTypeList(interfaces_off);
         try {
@@ -610,76 +641,79 @@ public class DexFileReader implements BaseDexFileReader {
                 throw dexException;
             }
         }
+
+        ByteBuffer.print(className);
     }
 
-    public Boolean ignoreClass(String className){
-       return false;
+    public Boolean ignoreClass(String className) {
+        return false;
     }
 
     private Object readEncodedValue(ByteBuffer in) {
         int b = 0xFF & in.get();
         int type = b & 0x1f;
         switch (type) {
-        case VALUE_BYTE:
-            return new Byte((byte) readIntBits(in, b));
+            case VALUE_BYTE:
+                return new Byte((byte) readIntBits(in, b));
 
-        case VALUE_SHORT:
-            return new Short((short) readIntBits(in, b));
+            case VALUE_SHORT:
+                return new Short((short) readIntBits(in, b));
 
-        case VALUE_INT:
-            return new Integer((int) readIntBits(in, b));
+            case VALUE_INT:
+                return new Integer((int) readIntBits(in, b));
 
-        case VALUE_LONG:
-            return new Long(readIntBits(in, b));
+            case VALUE_LONG:
+                return new Long(readIntBits(in, b));
 
-        case VALUE_CHAR:
-            return new Character((char) readUIntBits(in, b));
+            case VALUE_CHAR:
+                return new Character((char) readUIntBits(in, b));
 
-        case VALUE_STRING:
-            return getString((int) readUIntBits(in, b));
+            case VALUE_STRING:
+                return getString((int) readUIntBits(in, b));
 
-        case VALUE_FLOAT:
-            return Float.intBitsToFloat((int) (readFloatBits(in, b) >> 32));
+            case VALUE_FLOAT:
+                return Float.intBitsToFloat((int) (readFloatBits(in, b) >> 32));
 
-        case VALUE_DOUBLE:
-            return Double.longBitsToDouble(readFloatBits(in, b));
+            case VALUE_DOUBLE:
+                return Double.longBitsToDouble(readFloatBits(in, b));
 
-        case VALUE_NULL:
-            return null;
+            case VALUE_NULL:
+                return null;
 
-        case VALUE_BOOLEAN: {
-            return new Boolean(((b >> 5) & 0x3) != 0);
+            case VALUE_BOOLEAN: {
+                return new Boolean(((b >> 5) & 0x3) != 0);
 
-        }
-        case VALUE_TYPE: {
-            int type_id = (int) readUIntBits(in, b);
-            return new DexType(getType(type_id));
-        }
-        case VALUE_ENUM: {
-            return getField((int) readUIntBits(in, b));
-        }
+            }
+            case VALUE_TYPE: {
+                int type_id = (int) readUIntBits(in, b);
+                return new DexType(getType(type_id));
+            }
+            case VALUE_ENUM: {
+                return getField((int) readUIntBits(in, b));
+            }
 
-        case VALUE_METHOD: {
-            int method_id = (int) readUIntBits(in, b);
-            return getMethod(method_id);
+            case VALUE_METHOD: {
+                int method_id = (int) readUIntBits(in, b);
+                return getMethod(method_id);
 
-        }
-        case VALUE_FIELD: {
-            int field_id = (int) readUIntBits(in, b);
-            return getField(field_id);
-        }
-        case VALUE_ARRAY: {
-            return read_encoded_array(in);
-        }
-        case VALUE_ANNOTATION: {
-            return read_encoded_annotation(in);
-        }
-        default:
-            throw new DexException("Not support yet.");
+            }
+            case VALUE_FIELD: {
+                int field_id = (int) readUIntBits(in, b);
+                return getField(field_id);
+            }
+            case VALUE_ARRAY: {
+                return read_encoded_array(in);
+            }
+            case VALUE_ANNOTATION: {
+                return read_encoded_annotation(in);
+            }
+            default:
+                throw new DexException("Not support yet.");
         }
     }
 
-    private void acceptClass(DexClassVisitor dcv, int source_file_idx, int annotations_off, int class_data_off,
+    private void acceptClass(
+            DexClassVisitor dcv, int source_file_idx, int annotations_off, int class_data_off,
             int static_values_off, int config) {
         if ((config & SKIP_DEBUG) == 0) {
             // 获取源文件
@@ -851,6 +885,7 @@ public class DexFileReader implements BaseDexFileReader {
         return types;
     }
 
+    // TODO: lets try to figure out the size contribution of just this class
     private Method getMethod(int id) {
         methoIdIn.position(id * 8);
         int owner_idx = 0xFFFF & methoIdIn.getShort();
@@ -881,7 +916,7 @@ public class DexFileReader implements BaseDexFileReader {
         int length = readULeb128i(stringDataIn);
         try {
             StringBuilder buff = new StringBuilder((int) (length * 1.5));
-            return Mutf8.decode(stringDataIn, buff);
+            return stringDataIn.Mutf8_decode(buff);
         } catch (UTFDataFormatException e) {
             throw new DexException(e, "fail to load string %d@%08x", id, offset);
         }
@@ -894,7 +929,8 @@ public class DexFileReader implements BaseDexFileReader {
         return getString(typeIdIn.getInt(id * 4));
     }
 
-    private int acceptField(ByteBuffer in, int lastIndex, DexClassVisitor dcv,
+    private int acceptField(
+            ByteBuffer in, int lastIndex, DexClassVisitor dcv,
             Map<Integer, Integer> fieldAnnotationPositions, Object value, int config) {
         int diff = (int) readULeb128i(in);
         int field_access_flags = (int) readULeb128i(in);
@@ -919,7 +955,8 @@ public class DexFileReader implements BaseDexFileReader {
         return field_id;
     }
 
-    private int acceptMethod(ByteBuffer in, int lastIndex, DexClassVisitor cv, Map<Integer, Integer> methodAnnos,
+    private int acceptMethod(
+            ByteBuffer in, int lastIndex, DexClassVisitor cv, Map<Integer, Integer> methodAnnos,
             Map<Integer, Integer> parameterAnnos, int config, boolean firstMethod) {
         int offset = in.position();
         int diff = (int) readULeb128i(in);
@@ -967,10 +1004,10 @@ public class DexFileReader implements BaseDexFileReader {
                 }
                 if (code_off != 0) {
                     boolean keep = true;
-                    if (0 != (SKIP_CODE & config)) {
+                    /*if (0 != (SKIP_CODE & config)) {
                         keep = 0 != (KEEP_CLINIT & config) && method.getName().equals("<clinit>");
-                    }
-                    if(keep) {
+                    }*/
+                    if (keep) {
                         DexCodeVisitor dcv = dmv.visitCode();
                         if (dcv != null) {
                             try {
@@ -1015,20 +1052,22 @@ public class DexFileReader implements BaseDexFileReader {
 
     /**
      * the size of class in dex file
-     * 
+     *
      * @return class_defs_size
      */
     public final int getClassSize() {
         return class_defs_size;
     }
 
-    static class BadOpException extends RuntimeException{
-        public BadOpException(String fmt,Object ...args){
-            super(String.format(fmt,args));
+    static class BadOpException extends RuntimeException {
+
+        public BadOpException(String fmt, Object... args) {
+            super(String.format(fmt, args));
         }
     }
 
-    private void findLabels(byte[] insns, BitSet nextBit, BitSet badOps, Map<Integer, DexLabel> labelsMap, Set<Integer> handlers,
+    private void findLabels(
+            byte[] insns, BitSet nextBit, BitSet badOps, Map<Integer, DexLabel> labelsMap, Set<Integer> handlers,
             Method method) {
         Queue<Integer> q = new LinkedList<Integer>();
         q.add(0);
@@ -1043,10 +1082,10 @@ public class DexFileReader implements BaseDexFileReader {
             }
             try {
                 travelInsn(labelsMap, q, insns, offset);
-            } catch (IndexOutOfBoundsException indexOutOfRange){
+            } catch (IndexOutOfBoundsException indexOutOfRange) {
                 badOps.set(offset);
                 WARN("GLITCH: %04x %s | not enough space for reading instruction", offset, method.toString());
-            } catch (BadOpException badOp){
+            } catch (BadOpException badOp) {
                 badOps.set(offset);
                 WARN("GLITCH: %04x %s | %s", offset, method.toString(), badOp.getMessage());
             }
@@ -1070,66 +1109,66 @@ public class DexFileReader implements BaseDexFileReader {
         boolean canContinue = true;
         if (op.canBranch()) {
             switch (op.format) {
-            case kFmt10t:
-                target = offset + insns[u1offset + 1];
-                if (target < 0 || target * 2 > insns.length ) {
-                    throw new BadOpException("jump out of insns %s -> %04x", op, target);
-                }
-                q.add(target);
-                order(labelsMap, target);
-                break;
-            case kFmt20t:
-            case kFmt21t:
-                target = offset + sshort(insns, u1offset + 2);
-                if (target < 0 || target * 2 > insns.length ) {
-                    throw new BadOpException("jump out of insns %s -> %04x", op, target);
-                }
-                q.add(target);
-                order(labelsMap, target);
-                break;
-            case kFmt22t:
-                target = offset + sshort(insns, u1offset + 2);
-
-                int u = ubyte(insns, u1offset + 1);
-                boolean cmpSameReg = (u & 0x0F) == ((u >> 4) & 0x0F);
-                boolean skipTarget = false;
-                if (cmpSameReg) {
-                    switch (op) {
-                    case IF_EQ:
-                    case IF_GE:
-                    case IF_LE:
-                        // means always jump, equals to goto
-                        canContinue = false;
-                        break;
-                    case IF_NE:
-                    case IF_GT:
-                    case IF_LT:
-                        // means always not jump
-                        skipTarget = true;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                if (!skipTarget) {
-                    if (target < 0 || target * 2 > insns.length ) {
+                case kFmt10t:
+                    target = offset + insns[u1offset + 1];
+                    if (target < 0 || target * 2 > insns.length) {
                         throw new BadOpException("jump out of insns %s -> %04x", op, target);
                     }
                     q.add(target);
                     order(labelsMap, target);
-                }
-                break;
-            case kFmt30t:
-            case kFmt31t:
-                target = offset + sint(insns, u1offset + 2);
-                if (target < 0 || target * 2 > insns.length ) {
-                    throw new BadOpException("jump out of insns %s -> %04x", op, target);
-                }
-                q.add(target);
-                order(labelsMap, target);
-                break;
-            default:
-                break;
+                    break;
+                case kFmt20t:
+                case kFmt21t:
+                    target = offset + sshort(insns, u1offset + 2);
+                    if (target < 0 || target * 2 > insns.length) {
+                        throw new BadOpException("jump out of insns %s -> %04x", op, target);
+                    }
+                    q.add(target);
+                    order(labelsMap, target);
+                    break;
+                case kFmt22t:
+                    target = offset + sshort(insns, u1offset + 2);
+
+                    int u = ubyte(insns, u1offset + 1);
+                    boolean cmpSameReg = (u & 0x0F) == ((u >> 4) & 0x0F);
+                    boolean skipTarget = false;
+                    if (cmpSameReg) {
+                        switch (op) {
+                            case IF_EQ:
+                            case IF_GE:
+                            case IF_LE:
+                                // means always jump, equals to goto
+                                canContinue = false;
+                                break;
+                            case IF_NE:
+                            case IF_GT:
+                            case IF_LT:
+                                // means always not jump
+                                skipTarget = true;
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    if (!skipTarget) {
+                        if (target < 0 || target * 2 > insns.length) {
+                            throw new BadOpException("jump out of insns %s -> %04x", op, target);
+                        }
+                        q.add(target);
+                        order(labelsMap, target);
+                    }
+                    break;
+                case kFmt30t:
+                case kFmt31t:
+                    target = offset + sint(insns, u1offset + 2);
+                    if (target < 0 || target * 2 > insns.length) {
+                        throw new BadOpException("jump out of insns %s -> %04x", op, target);
+                    }
+                    q.add(target);
+                    order(labelsMap, target);
+                    break;
+                default:
+                    break;
             }
         }
         if (op.canSwitch()) {
@@ -1137,38 +1176,38 @@ public class DexFileReader implements BaseDexFileReader {
             int u1SwitchData = 2 * (offset + sint(insns, u1offset + 2));
             if (u1SwitchData + 2 < insns.length) {
 
-                    switch (insns[u1SwitchData + 1]) {
-                        case 0x01: // packed-switch-data
-                        {
-                            int size = ushort(insns, u1SwitchData + 2);
-                            int b = u1SwitchData + 8;// targets
-                            for (int i = 0; i < size; i++) {
-                                target = offset + sint(insns, b + i * 4);
-                                if (target < 0 || target * 2 > insns.length ) {
-                                    throw new BadOpException("jump out of insns %s -> %04x", op, target);
-                                }
-                                q.add(target);
-                                order(labelsMap, target);
+                switch (insns[u1SwitchData + 1]) {
+                    case 0x01: // packed-switch-data
+                    {
+                        int size = ushort(insns, u1SwitchData + 2);
+                        int b = u1SwitchData + 8;// targets
+                        for (int i = 0; i < size; i++) {
+                            target = offset + sint(insns, b + i * 4);
+                            if (target < 0 || target * 2 > insns.length) {
+                                throw new BadOpException("jump out of insns %s -> %04x", op, target);
                             }
-                            break;
+                            q.add(target);
+                            order(labelsMap, target);
                         }
-                        case 0x02:// sparse-switch-data
-                        {
-                            int size = ushort(insns, u1SwitchData + 2);
-                            int b = u1SwitchData + 4 + 4 * size;// targets
-                            for (int i = 0; i < size; i++) {
-                                target = offset + sint(insns, b + i * 4);
-                                if (target < 0 || target * 2 > insns.length ) {
-                                    throw new BadOpException("jump out of insns %s -> %04x", op, target);
-                                }
-                                q.add(target);
-                                order(labelsMap, target);
-                            }
-                            break;
-                        }
-                        default:
-                            throw new BadOpException("bad payload for %s", op);
+                        break;
                     }
+                    case 0x02:// sparse-switch-data
+                    {
+                        int size = ushort(insns, u1SwitchData + 2);
+                        int b = u1SwitchData + 4 + 4 * size;// targets
+                        for (int i = 0; i < size; i++) {
+                            target = offset + sint(insns, b + i * 4);
+                            if (target < 0 || target * 2 > insns.length) {
+                                throw new BadOpException("jump out of insns %s -> %04x", op, target);
+                            }
+                            q.add(target);
+                            order(labelsMap, target);
+                        }
+                        break;
+                    }
+                    default:
+                        throw new BadOpException("bad payload for %s", op);
+                }
             } else {
                 throw new BadOpException("bad payload offset for %s", op);
             }
@@ -1177,27 +1216,27 @@ public class DexFileReader implements BaseDexFileReader {
         if (canContinue) {
             int idx = Integer.MAX_VALUE;
             switch (op.indexType) {
-            case kIndexStringRef:
-                if (op.format == InstructionFormat.kFmt31c) {
-                    idx = uint(insns, u1offset + 2);
-                } else {// other
+                case kIndexStringRef:
+                    if (op.format == InstructionFormat.kFmt31c) {
+                        idx = uint(insns, u1offset + 2);
+                    } else {// other
+                        idx = ushort(insns, u1offset + 2);
+                    }
+                    canContinue = idx >= 0 && idx < string_ids_size;
+                    break;
+                case kIndexTypeRef:
                     idx = ushort(insns, u1offset + 2);
-                }
-                canContinue = idx >= 0 && idx < string_ids_size;
-                break;
-            case kIndexTypeRef:
-                idx = ushort(insns, u1offset + 2);
-                canContinue = idx < type_ids_size;
-                break;
-            case kIndexMethodRef:
-                idx = ushort(insns, u1offset + 2);
-                canContinue = idx < method_ids_size;
-                break;
-            case kIndexFieldRef:
-                idx = ushort(insns, u1offset + 2);
-                canContinue = idx < field_ids_size;
-                break;
-            default:
+                    canContinue = idx < type_ids_size;
+                    break;
+                case kIndexMethodRef:
+                    idx = ushort(insns, u1offset + 2);
+                    canContinue = idx < method_ids_size;
+                    break;
+                case kIndexFieldRef:
+                    idx = ushort(insns, u1offset + 2);
+                    canContinue = idx < field_ids_size;
+                    break;
+                default:
             }
             if (!canContinue) {
                 throw new BadOpException("index-out-of-range for %s index: %d", op, idx);
@@ -1207,25 +1246,25 @@ public class DexFileReader implements BaseDexFileReader {
         if (canContinue && op.canContinue()) {
             if (op == Op.NOP) {
                 switch (insns[u1offset + 1]) {
-                case 0x00:
-                    q.add(offset + op.format.size);
-                    break;
-                case 0x01: {
-                    int size = ushort(insns, u1offset + 2);
-                    q.add(offset + (size * 2) + 4);
-                    break;
-                }
-                case 0x02: {
-                    int size = ushort(insns, u1offset + 2);
-                    q.add(offset + (size * 4) + 2);
-                    break;
-                }
-                case 0x03: {
-                    int element_width = ushort(insns, u1offset + 2);
-                    int size = uint(insns, u1offset + 4);
-                    q.add(offset + (size * element_width + 1) / 2 + 4);
-                    break;
-                }
+                    case 0x00:
+                        q.add(offset + op.format.size);
+                        break;
+                    case 0x01: {
+                        int size = ushort(insns, u1offset + 2);
+                        q.add(offset + (size * 2) + 4);
+                        break;
+                    }
+                    case 0x02: {
+                        int size = ushort(insns, u1offset + 2);
+                        q.add(offset + (size * 4) + 2);
+                        break;
+                    }
+                    case 0x03: {
+                        int element_width = ushort(insns, u1offset + 2);
+                        int size = uint(insns, u1offset + 4);
+                        q.add(offset + (size * element_width + 1) / 2 + 4);
+                        break;
+                    }
                 }
             } else {
                 q.add(offset + op.format.size);
@@ -1233,7 +1272,8 @@ public class DexFileReader implements BaseDexFileReader {
         }
     }
 
-    private void findTryCatch(ByteBuffer in, DexCodeVisitor dcv, int tries_size, int insn_size,
+    private void findTryCatch(
+            ByteBuffer in, DexCodeVisitor dcv, int tries_size, int insn_size,
             Map<Integer, DexLabel> labelsMap, Set<Integer> handlers) {
         int encoded_catch_handler_list = in.position() + tries_size * 8;
         ByteBuffer handlerIn = in.duplicate().order(ByteOrder.LITTLE_ENDIAN);
@@ -1288,6 +1328,8 @@ public class DexFileReader implements BaseDexFileReader {
         int debug_info_off = in.getInt();
         int insns = in.getInt();
 
+        //System.out.println("Number of insns: " + insns);
+
         byte[] insnsArray = new byte[insns * 2];
         in.get(insnsArray);
         dcv.visitRegister(registers_size);
@@ -1317,7 +1359,12 @@ public class DexFileReader implements BaseDexFileReader {
     }
 
     // 处理指令
-    private void acceptInsn(byte[] insns, DexCodeVisitor dcv, BitSet nextInsn, BitSet badOps, Map<Integer, DexLabel> labelsMap) {
+    private void acceptInsn(
+            byte[] insns,
+            DexCodeVisitor dcv,
+            BitSet nextInsn,
+            BitSet badOps,
+            Map<Integer, DexLabel> labelsMap) {
         Iterator<Integer> labelOffsetIterator = labelsMap.keySet().iterator();
         Integer nextLabelOffset = labelOffsetIterator.hasNext() ? labelOffsetIterator.next() : null;
         Op[] values = Op.ops;
@@ -1334,7 +1381,7 @@ public class DexFileReader implements BaseDexFileReader {
                 }
             }
 
-            if(badOps.get(offset)){
+            if (badOps.get(offset)) {
                 dcv.visitStmt0R(Op.BAD_OP);
                 continue;
             }
@@ -1346,285 +1393,285 @@ public class DexFileReader implements BaseDexFileReader {
 
             int a, b, c, target;
             switch (op.format) {
-            // case kFmt00x: break;
-            case kFmt10x:
-                dcv.visitStmt0R(op);
-                break;
+                // case kFmt00x: break;
+                case kFmt10x:
+                    dcv.visitStmt0R(op);
+                    break;
 
-            case kFmt11x:
-                dcv.visitStmt1R(op, 0xFF & insns[u1offset + 1]);
-                break;
-            case kFmt12x:
-                a = ubyte(insns, u1offset + 1);
-                dcv.visitStmt2R(op, a & 0xF, a >> 4);
-                break;
-            // case kFmt20bc:break;
-            case kFmt10t:
-                target = offset + insns[u1offset + 1];
-                dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
-                break;
-            case kFmt20t:
-                target = offset + sshort(insns, u1offset + 2);
-                dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
-                break;
-            case kFmt21t:
-                target = offset + sshort(insns, u1offset + 2);
-                dcv.visitJumpStmt(op, ubyte(insns, u1offset + 1), -1, labelsMap.get(target));
-                break;
-            case kFmt22t:
-                target = offset + sshort(insns, u1offset + 2);
-                a = ubyte(insns, u1offset + 1);
-                b = a & 0x0F;
-                c = a >> 4;
-                boolean ignore = false;
-                if (b == c) {
-                    switch (op) {
-                    case IF_EQ:
-                    case IF_GE:
-                    case IF_LE:
-                        // means always jump, equals to goto
-                        dcv.visitJumpStmt(Op.GOTO, 0, 0, labelsMap.get(target));
-                        ignore = true;
-                        break;
-                    case IF_NE:
-                    case IF_GT:
-                    case IF_LT:
-                        // means always not jump
-                        ignore = true;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                if (!ignore) {
-                    dcv.visitJumpStmt(op, b, c, labelsMap.get(target));
-                }
-                break;
-            case kFmt30t:
-                target = offset + sint(insns, u1offset + 2);
-                dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
-                break;
-            case kFmt31t:
-                target = offset + sint(insns, u1offset + 2);
-                a = ubyte(insns, u1offset + 1);
-                int u1SwitchData = 2 * target;
-                if (op == Op.FILL_ARRAY_DATA) {
-                    int element_width = ushort(insns, u1SwitchData + 2);
-                    int size = uint(insns, u1SwitchData + 4);
-                    switch (element_width) {
-                    case 1: {
-                        byte[] data = new byte[size];
-                        System.arraycopy(insns, u1SwitchData + 8, data, 0, size);
-                        dcv.visitFillArrayDataStmt(op, a, data);
-                    }
-                        break;
-                    case 2: {
-                        short[] data = new short[size];
-                        for (int i = 0; i < size; i++) {
-                            data[i] = (short) sshort(insns, u1SwitchData + 8 + 2 * i);
-                        }
-                        dcv.visitFillArrayDataStmt(op, a, data);
-                    }
-                        break;
-                    case 4: {
-                        int[] data = new int[size];
-                        for (int i = 0; i < size; i++) {
-                            data[i] = sint(insns, u1SwitchData + 8 + 4 * i);
-                        }
-                        dcv.visitFillArrayDataStmt(op, a, data);
-                    }
-                        break;
-                    case 8: {
-                        long[] data = new long[size];
-                        for (int i = 0; i < size; i++) {
-                            int t = u1SwitchData + 8 + 8 * i;
-                            long z = 0;
-                            z |= ((long) ushort(insns, t + 0)) << 0;
-                            z |= ((long) ushort(insns, t + 2)) << 16;
-                            z |= ((long) ushort(insns, t + 4)) << 32;
-                            z |= ((long) ushort(insns, t + 6)) << 48;
-                            data[i] = z;
-                        }
-                        dcv.visitFillArrayDataStmt(op, a, data);
-                    }
-                        break;
-                    }
-                } else if (op == Op.SPARSE_SWITCH) {
-                    int size = sshort(insns, u1SwitchData + 2);
-                    int keys[] = new int[size];
-                    DexLabel labels[] = new DexLabel[size];
-                    int z = u1SwitchData + 4;
-                    for (int i = 0; i < size; i++) {
-                        keys[i] = sint(insns, z + i * 4);
-                    }
-                    z += size * 4;
-                    for (int i = 0; i < size; i++) {
-                        labels[i] = labelsMap.get(offset + sint(insns, z + i * 4));
-                    }
-                    dcv.visitSparseSwitchStmt(op, a, keys, labels);
-                } else {
-                    int size = sshort(insns, u1SwitchData + 2);
-                    int first_key = sint(insns, u1SwitchData + 4);
-                    DexLabel labels[] = new DexLabel[size];
-                    int z = u1SwitchData + 8;
-                    for (int i = 0; i < size; i++) {
-                        labels[i] = labelsMap.get(offset + sint(insns, z));
-                        z += 4;
-                    }
-                    dcv.visitPackedSwitchStmt(op, a, first_key, labels);
-                }
-                break;
-            case kFmt21c:
-                a = ubyte(insns, u1offset + 1);
-                b = ushort(insns, u1offset + 2);
-                switch (op.indexType) {
-                case kIndexStringRef:
-                    dcv.visitConstStmt(op, a, getString(b));
+                case kFmt11x:
+                    dcv.visitStmt1R(op, 0xFF & insns[u1offset + 1]);
                     break;
-                case kIndexFieldRef:
-                    dcv.visitFieldStmt(op, a, -1, getField(b));
-                    break;
-                case kIndexTypeRef:
-                    if (op == Op.CONST_CLASS) {
-                        dcv.visitConstStmt(op, a, new DexType(getType(b)));
-                    } else {
-                        dcv.visitTypeStmt(op, a, -1, getType(b));
-                    }
-                    break;
-                default:
-                    break;
-                }
-                break;
-            case kFmt22c:
-                a = ubyte(insns, u1offset + 1);
-                b = ushort(insns, u1offset + 2);
-                switch (op.indexType) {
-                case kIndexFieldRef:
-                    dcv.visitFieldStmt(op, a & 0xF, a >> 4, getField(b));
-                    break;
-                case kIndexTypeRef:
-                    dcv.visitTypeStmt(op, a & 0xF, a >> 4, getType(b));
-                    break;
-                default:
-                    break;
-                }
-                break;
-            case kFmt31c:
-                if (op.indexType == InstructionIndexType.kIndexStringRef) {
+                case kFmt12x:
                     a = ubyte(insns, u1offset + 1);
-                    b = uint(insns, u1offset + 2);
-                    dcv.visitConstStmt(op, a, getString(b));
-                }
-                break;
-            case kFmt35c: {
-                a = ubyte(insns, u1offset + 1);
-                b = ushort(insns, u1offset + 2);
-                int dc = ubyte(insns, u1offset + 4); // DC
-                int fe = ubyte(insns, u1offset + 5); // FE
+                    dcv.visitStmt2R(op, a & 0xF, a >> 4);
+                    break;
+                // case kFmt20bc:break;
+                case kFmt10t:
+                    target = offset + insns[u1offset + 1];
+                    dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
+                    break;
+                case kFmt20t:
+                    target = offset + sshort(insns, u1offset + 2);
+                    dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
+                    break;
+                case kFmt21t:
+                    target = offset + sshort(insns, u1offset + 2);
+                    dcv.visitJumpStmt(op, ubyte(insns, u1offset + 1), -1, labelsMap.get(target));
+                    break;
+                case kFmt22t:
+                    target = offset + sshort(insns, u1offset + 2);
+                    a = ubyte(insns, u1offset + 1);
+                    b = a & 0x0F;
+                    c = a >> 4;
+                    boolean ignore = false;
+                    if (b == c) {
+                        switch (op) {
+                            case IF_EQ:
+                            case IF_GE:
+                            case IF_LE:
+                                // means always jump, equals to goto
+                                dcv.visitJumpStmt(Op.GOTO, 0, 0, labelsMap.get(target));
+                                ignore = true;
+                                break;
+                            case IF_NE:
+                            case IF_GT:
+                            case IF_LT:
+                                // means always not jump
+                                ignore = true;
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    if (!ignore) {
+                        dcv.visitJumpStmt(op, b, c, labelsMap.get(target));
+                    }
+                    break;
+                case kFmt30t:
+                    target = offset + sint(insns, u1offset + 2);
+                    dcv.visitJumpStmt(op, -1, -1, labelsMap.get(target));
+                    break;
+                case kFmt31t:
+                    target = offset + sint(insns, u1offset + 2);
+                    a = ubyte(insns, u1offset + 1);
+                    int u1SwitchData = 2 * target;
+                    if (op == Op.FILL_ARRAY_DATA) {
+                        int element_width = ushort(insns, u1SwitchData + 2);
+                        int size = uint(insns, u1SwitchData + 4);
+                        switch (element_width) {
+                            case 1: {
+                                byte[] data = new byte[size];
+                                System.arraycopy(insns, u1SwitchData + 8, data, 0, size);
+                                dcv.visitFillArrayDataStmt(op, a, data);
+                            }
+                            break;
+                            case 2: {
+                                short[] data = new short[size];
+                                for (int i = 0; i < size; i++) {
+                                    data[i] = (short) sshort(insns, u1SwitchData + 8 + 2 * i);
+                                }
+                                dcv.visitFillArrayDataStmt(op, a, data);
+                            }
+                            break;
+                            case 4: {
+                                int[] data = new int[size];
+                                for (int i = 0; i < size; i++) {
+                                    data[i] = sint(insns, u1SwitchData + 8 + 4 * i);
+                                }
+                                dcv.visitFillArrayDataStmt(op, a, data);
+                            }
+                            break;
+                            case 8: {
+                                long[] data = new long[size];
+                                for (int i = 0; i < size; i++) {
+                                    int t = u1SwitchData + 8 + 8 * i;
+                                    long z = 0;
+                                    z |= ((long) ushort(insns, t + 0)) << 0;
+                                    z |= ((long) ushort(insns, t + 2)) << 16;
+                                    z |= ((long) ushort(insns, t + 4)) << 32;
+                                    z |= ((long) ushort(insns, t + 6)) << 48;
+                                    data[i] = z;
+                                }
+                                dcv.visitFillArrayDataStmt(op, a, data);
+                            }
+                            break;
+                        }
+                    } else if (op == Op.SPARSE_SWITCH) {
+                        int size = sshort(insns, u1SwitchData + 2);
+                        int keys[] = new int[size];
+                        DexLabel labels[] = new DexLabel[size];
+                        int z = u1SwitchData + 4;
+                        for (int i = 0; i < size; i++) {
+                            keys[i] = sint(insns, z + i * 4);
+                        }
+                        z += size * 4;
+                        for (int i = 0; i < size; i++) {
+                            labels[i] = labelsMap.get(offset + sint(insns, z + i * 4));
+                        }
+                        dcv.visitSparseSwitchStmt(op, a, keys, labels);
+                    } else {
+                        int size = sshort(insns, u1SwitchData + 2);
+                        int first_key = sint(insns, u1SwitchData + 4);
+                        DexLabel labels[] = new DexLabel[size];
+                        int z = u1SwitchData + 8;
+                        for (int i = 0; i < size; i++) {
+                            labels[i] = labelsMap.get(offset + sint(insns, z));
+                            z += 4;
+                        }
+                        dcv.visitPackedSwitchStmt(op, a, first_key, labels);
+                    }
+                    break;
+                case kFmt21c:
+                    a = ubyte(insns, u1offset + 1);
+                    b = ushort(insns, u1offset + 2);
+                    switch (op.indexType) {
+                        case kIndexStringRef:
+                            dcv.visitConstStmt(op, a, getString(b));
+                            break;
+                        case kIndexFieldRef:
+                            dcv.visitFieldStmt(op, a, -1, getField(b));
+                            break;
+                        case kIndexTypeRef:
+                            if (op == Op.CONST_CLASS) {
+                                dcv.visitConstStmt(op, a, new DexType(getType(b)));
+                            } else {
+                                dcv.visitTypeStmt(op, a, -1, getType(b));
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case kFmt22c:
+                    a = ubyte(insns, u1offset + 1);
+                    b = ushort(insns, u1offset + 2);
+                    switch (op.indexType) {
+                        case kIndexFieldRef:
+                            dcv.visitFieldStmt(op, a & 0xF, a >> 4, getField(b));
+                            break;
+                        case kIndexTypeRef:
+                            dcv.visitTypeStmt(op, a & 0xF, a >> 4, getType(b));
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case kFmt31c:
+                    if (op.indexType == InstructionIndexType.kIndexStringRef) {
+                        a = ubyte(insns, u1offset + 1);
+                        b = uint(insns, u1offset + 2);
+                        dcv.visitConstStmt(op, a, getString(b));
+                    }
+                    break;
+                case kFmt35c: {
+                    a = ubyte(insns, u1offset + 1);
+                    b = ushort(insns, u1offset + 2);
+                    int dc = ubyte(insns, u1offset + 4); // DC
+                    int fe = ubyte(insns, u1offset + 5); // FE
 
-                int regs[] = new int[a >> 4];
-                switch (a >> 4) {
-                case 5:
-                    regs[4] = a & 0xF;// G
-                case 4:
-                    regs[3] = 0xF & (fe >> 4);// F
-                case 3:
-                    regs[2] = 0xF & (fe >> 0);// E
-                case 2:
-                    regs[1] = 0xF & (dc >> 4);// D
-                case 1:
-                    regs[0] = 0xF & (dc >> 0);// C
-                }
-                if (op.indexType == InstructionIndexType.kIndexTypeRef) {
-                    dcv.visitFilledNewArrayStmt(op, regs, getType(b));
-                } else {
-                    dcv.visitMethodStmt(op, regs, getMethod(b));
-                }
-            }
-                break;
-            case kFmt3rc: {
-                a = ubyte(insns, u1offset + 1);
-                b = ushort(insns, u1offset + 2);
-                c = ushort(insns, u1offset + 4);
-                int regs[] = new int[a];
-                for (int i = 0; i < a; i++) {
-                    regs[i] = c + i;
-                }
-                if (op.indexType == InstructionIndexType.kIndexTypeRef) {
-                    dcv.visitFilledNewArrayStmt(op, regs, getType(b));
-                } else {
-                    dcv.visitMethodStmt(op, regs, getMethod(b));
-                }
-            }
-                break;
-            case kFmt22x:
-                a = ubyte(insns, u1offset + 1);
-                b = ushort(insns, u1offset + 2);
-                dcv.visitStmt2R(op, a, b);
-                break;
-            case kFmt23x:
-                a = ubyte(insns, u1offset + 1);
-                b = ubyte(insns, u1offset + 2);
-                c = ubyte(insns, u1offset + 3);
-                dcv.visitStmt3R(op, a, b, c);
-                break;
-            case kFmt32x:
-                a = ushort(insns, u1offset + 2);
-                b = ushort(insns, u1offset + 4);
-                dcv.visitStmt2R(op, a, b);
-                break;
-            case kFmt11n:
-                a = insns[u1offset + 1];
-                dcv.visitConstStmt(op, a & 0xF, a >> 4);
-                break;
-            case kFmt21h:
-                a = ubyte(insns, u1offset + 1);
-                b = sshort(insns, u1offset + 2);
-                if (op == Op.CONST_HIGH16) {
-                    dcv.visitConstStmt(op, a, b << 16);
-                } else {
-                    dcv.visitConstStmt(op, a, ((long) b) << 48);
+                    int regs[] = new int[a >> 4];
+                    switch (a >> 4) {
+                        case 5:
+                            regs[4] = a & 0xF;// G
+                        case 4:
+                            regs[3] = 0xF & (fe >> 4);// F
+                        case 3:
+                            regs[2] = 0xF & (fe >> 0);// E
+                        case 2:
+                            regs[1] = 0xF & (dc >> 4);// D
+                        case 1:
+                            regs[0] = 0xF & (dc >> 0);// C
+                    }
+                    if (op.indexType == InstructionIndexType.kIndexTypeRef) {
+                        dcv.visitFilledNewArrayStmt(op, regs, getType(b));
+                    } else {
+                        dcv.visitMethodStmt(op, regs, getMethod(b));
+                    }
                 }
                 break;
-            case kFmt21s:
-                a = ubyte(insns, u1offset + 1);
-                b = sshort(insns, u1offset + 2);
-                if (op == Op.CONST_16) {
-                    dcv.visitConstStmt(op, a, b);
-                } else {
-                    dcv.visitConstStmt(op, a, (long) b);
+                case kFmt3rc: {
+                    a = ubyte(insns, u1offset + 1);
+                    b = ushort(insns, u1offset + 2);
+                    c = ushort(insns, u1offset + 4);
+                    int regs[] = new int[a];
+                    for (int i = 0; i < a; i++) {
+                        regs[i] = c + i;
+                    }
+                    if (op.indexType == InstructionIndexType.kIndexTypeRef) {
+                        dcv.visitFilledNewArrayStmt(op, regs, getType(b));
+                    } else {
+                        dcv.visitMethodStmt(op, regs, getMethod(b));
+                    }
                 }
                 break;
-            case kFmt22b:
-                a = ubyte(insns, u1offset + 1);
-                b = ubyte(insns, u1offset + 2);
-                c = sbyte(insns, u1offset + 3);
-                dcv.visitStmt2R1N(op, a, b, c);
-                break;
-            case kFmt22s:
-                a = ubyte(insns, u1offset + 1);
-                b = sshort(insns, u1offset + 2);
-                dcv.visitStmt2R1N(op, a & 0xF, a >> 4, b);
-                break;
-            // case kFmt22cs:break;
-            case kFmt31i:
-                a = ubyte(insns, u1offset + 1);
-                b = sint(insns, u1offset + 2);
-                if (op == Op.CONST) {
-                    dcv.visitConstStmt(op, a, b);
-                } else {
-                    dcv.visitConstStmt(op, a, (long) b);
-                }
-                break;
-            case kFmt51l:
-                a = ubyte(insns, u1offset + 1);
-                long z = 0;
-                z |= ((long) ushort(insns, u1offset + 2)) << 0;
-                z |= ((long) ushort(insns, u1offset + 4)) << 16;
-                z |= ((long) ushort(insns, u1offset + 6)) << 32;
-                z |= ((long) ushort(insns, u1offset + 8)) << 48;
-                dcv.visitConstStmt(op, a, z);
-                break;
+                case kFmt22x:
+                    a = ubyte(insns, u1offset + 1);
+                    b = ushort(insns, u1offset + 2);
+                    dcv.visitStmt2R(op, a, b);
+                    break;
+                case kFmt23x:
+                    a = ubyte(insns, u1offset + 1);
+                    b = ubyte(insns, u1offset + 2);
+                    c = ubyte(insns, u1offset + 3);
+                    dcv.visitStmt3R(op, a, b, c);
+                    break;
+                case kFmt32x:
+                    a = ushort(insns, u1offset + 2);
+                    b = ushort(insns, u1offset + 4);
+                    dcv.visitStmt2R(op, a, b);
+                    break;
+                case kFmt11n:
+                    a = insns[u1offset + 1];
+                    dcv.visitConstStmt(op, a & 0xF, a >> 4);
+                    break;
+                case kFmt21h:
+                    a = ubyte(insns, u1offset + 1);
+                    b = sshort(insns, u1offset + 2);
+                    if (op == Op.CONST_HIGH16) {
+                        dcv.visitConstStmt(op, a, b << 16);
+                    } else {
+                        dcv.visitConstStmt(op, a, ((long) b) << 48);
+                    }
+                    break;
+                case kFmt21s:
+                    a = ubyte(insns, u1offset + 1);
+                    b = sshort(insns, u1offset + 2);
+                    if (op == Op.CONST_16) {
+                        dcv.visitConstStmt(op, a, b);
+                    } else {
+                        dcv.visitConstStmt(op, a, (long) b);
+                    }
+                    break;
+                case kFmt22b:
+                    a = ubyte(insns, u1offset + 1);
+                    b = ubyte(insns, u1offset + 2);
+                    c = sbyte(insns, u1offset + 3);
+                    dcv.visitStmt2R1N(op, a, b, c);
+                    break;
+                case kFmt22s:
+                    a = ubyte(insns, u1offset + 1);
+                    b = sshort(insns, u1offset + 2);
+                    dcv.visitStmt2R1N(op, a & 0xF, a >> 4, b);
+                    break;
+                // case kFmt22cs:break;
+                case kFmt31i:
+                    a = ubyte(insns, u1offset + 1);
+                    b = sint(insns, u1offset + 2);
+                    if (op == Op.CONST) {
+                        dcv.visitConstStmt(op, a, b);
+                    } else {
+                        dcv.visitConstStmt(op, a, (long) b);
+                    }
+                    break;
+                case kFmt51l:
+                    a = ubyte(insns, u1offset + 1);
+                    long z = 0;
+                    z |= ((long) ushort(insns, u1offset + 2)) << 0;
+                    z |= ((long) ushort(insns, u1offset + 4)) << 16;
+                    z |= ((long) ushort(insns, u1offset + 6)) << 32;
+                    z |= ((long) ushort(insns, u1offset + 8)) << 48;
+                    dcv.visitConstStmt(op, a, z);
+                    break;
             }
         }
 
@@ -1642,6 +1689,7 @@ public class DexFileReader implements BaseDexFileReader {
      * An entry in the resulting locals table
      */
     static private class LocalEntry {
+
         public String name, type, signature;
 
         private LocalEntry(String name, String type) {
