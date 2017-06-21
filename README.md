@@ -2,7 +2,7 @@
 
 This is a fork of [dex2jar](https://github.com/pxb1988/dex2jar). Additional code has been added to determine the size breakdown per class. 
 
-Run dex2jar normally in order to convert an apk into jar files. During the transformation, additional profiling code determines which parts of the dex file are read from in order to create each class in the jar. After the transformation is complete, we tally how many bytes of the dex file each class needed to read. Based on this, we create a tally. 
+Run dex2jar normally in order to convert an apk into jar files. During the transformation, additional profiling code determines which parts of the dex file are read from in order to create each class in the jar. After the transformation is complete, we tally how many bytes of the dex file each class needed to read. Based on this, we subdivide each bytes' blame between all classes that needed the byte.
 
 This is a naive approach and correspondly slow. My hope is that its naivity makes it bulletproof.
 
