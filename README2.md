@@ -35,3 +35,16 @@ OTHER THINGS I'M LOOKING INTO:
 RESULTS:
 * with multicoloring I get 1.4MB
 * with regular coloring: 1.8MB
+
+Results Of Full Analysis:
+* Master without any string values included in the results: https://docs.google.com/spreadsheets/d/1H6UQhwmpxwkpaCfLuhpV9VNplaT2nuwE0OHmpSPjYkM/edit#gid=730591166 
+	--> shows that models are 1/4 of the dex
+	--> shows that uber classes are 2/3 of the code
+	--> shows that dagger < 10% of the code size
+* Release without any strings: https://docs.google.com/spreadsheets/d/1X_GYxBnAgGnVL6YEDxM17HV_nTrVjVKUJeMWe3GMng0/edit#gid=904070550
+	* done on https://metro.uberinternal.com/helix_dual/android/4.158
+	--> shows that models are 1/4 of the dex (11MB)
+* Release with strings
+
+Upcoming experiments:
+* see if we can find anythign about the impact on binary sizes by doing cohort analysis or something.

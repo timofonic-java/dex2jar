@@ -53,6 +53,11 @@ public class ProfiledByteBuffer {
     static public String currentClass = "header";
     private void incrementProfile(int index, int size) {
         SizeAndLocation sizeAndLocation = new SizeAndLocation(size, index);
+        color(sizeAndLocation);
+
+        if (true) {
+            return;
+        }
         memoryAccesses.put(currentClass, sizeAndLocation);
         Integer count = countSize.get(sizeAndLocation) != null ? countSize.get(sizeAndLocation) : 0;
         countSize.put(sizeAndLocation, count + 1);
@@ -62,8 +67,6 @@ public class ProfiledByteBuffer {
             System.err.println(sizeAndLocation.size < sizeAndLocation1.size ? sizeAndLocation.size :
                     sizeAndLocation1.size);
         }
-
-        color(sizeAndLocation);
     }
     public static void setClass(String clazz) {
         currentClass = clazz;
@@ -85,7 +88,7 @@ public class ProfiledByteBuffer {
 
 
     static ArrayList<String> colorBuffer[] = new ArrayList[10000000];
-    static ArrayList<Pair<String, Long>> multiColoring[] = new ArrayList[10000000];
+    static ArrayList<Pair<String, Long>> multiColoring[] = new ArrayList[10000000];// new ArrayList[10000000];
     public static void color(SizeAndLocation sizeAndLocation) {
         for (int i = sizeAndLocation.location; i < sizeAndLocation.size + sizeAndLocation.location; i++) {
             if (colorBuffer[i] == null) {
@@ -99,7 +102,7 @@ public class ProfiledByteBuffer {
     }
     /**
      * Less accurate than {link @color} but faster. If overlaps happen the attribution can be significantly wrong.
-     * As a result this is currently unused.
+     * As a result I only use this for the string tracking since it would be otherwise unbearably slow.
      * @param sizeAndLocation
      */
     public static void multiColor(SizeAndLocation sizeAndLocation) {
@@ -125,13 +128,12 @@ public class ProfiledByteBuffer {
                 total += increment;
             }
         }
-        /*
         for (ArrayList<Pair<String, Long>> pairs : multiColoring) {
             if (pairs == null) {
                 continue;
             }
-            double increment = 1.0 / pairs.size();
             for (Pair<String, Long> pair : pairs) {
+                double increment = pair.getValue() / pairs.size();
                 String className = pair.getKey();
                 if (classCounts.containsKey(className)) {
                     classCounts.put(className, classCounts.get(className) + increment);
@@ -140,7 +142,7 @@ public class ProfiledByteBuffer {
                 }
                 total += increment;
             }
-        }*/
+        }
         for (String s : classCounts.keySet()) {
             System.out.println(classCounts.get(s) + ", " + s);
         }
@@ -150,6 +152,7 @@ public class ProfiledByteBuffer {
 
     public static void clear() {
         colorBuffer = new ArrayList[10000000];
+        multiColoring = new ArrayList[10000000];
         memoryAccesses.clear();
         countSize.clear();
         locations.clear();
@@ -227,8 +230,9 @@ public class ProfiledByteBuffer {
         int position = innerByteBuffer.position();
         String str = Mutf8.decode(innerByteBuffer, sb);
         int position2 = innerByteBuffer.position();
-        //ProfiledByteBuffer.color(new SizeAndLocation(position, position2 - position));
-        incrementProfile(position(), position2 - position);
+        ProfiledByteBuffer.multiColor(new SizeAndLocation(position2 - position, position));
+        // Results in a significantly bigger value.
+        //ProfiledByteBuffer.color(new SizeAndLocation(position2 - position, position));
         return str;
     }
 }
