@@ -125,6 +125,7 @@ public class ProfiledByteBuffer {
                 total += increment;
             }
         }
+        /*
         for (ArrayList<Pair<String, Long>> pairs : multiColoring) {
             if (pairs == null) {
                 continue;
@@ -139,7 +140,7 @@ public class ProfiledByteBuffer {
                 }
                 total += increment;
             }
-        }
+        }*/
         for (String s : classCounts.keySet()) {
             System.out.println(classCounts.get(s) + ", " + s);
         }
@@ -148,6 +149,7 @@ public class ProfiledByteBuffer {
     }
 
     public static void clear() {
+        colorBuffer = new ArrayList[10000000];
         memoryAccesses.clear();
         countSize.clear();
         locations.clear();
@@ -225,7 +227,7 @@ public class ProfiledByteBuffer {
         int position = innerByteBuffer.position();
         String str = Mutf8.decode(innerByteBuffer, sb);
         int position2 = innerByteBuffer.position();
-        ProfiledByteBuffer.color(new SizeAndLocation(position, position2 - position));
+        //ProfiledByteBuffer.color(new SizeAndLocation(position, position2 - position));
         incrementProfile(position(), position2 - position);
         return str;
     }

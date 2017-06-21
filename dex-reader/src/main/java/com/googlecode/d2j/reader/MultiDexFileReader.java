@@ -97,7 +97,7 @@ public class MultiDexFileReader implements BaseDexFileReader {
         for (int i = 0; i < size; i++) {
             if (lastReader != items.get(i).reader) {
                 lastReader = items.get(i).reader;
-                System.err.println("Done dex");
+                System.err.println("Starting next dex");
                 ProfiledByteBuffer.getTotalColoring();
                 ProfiledByteBuffer.clear();
             }
