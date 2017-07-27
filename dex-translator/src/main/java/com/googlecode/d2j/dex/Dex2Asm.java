@@ -1,6 +1,7 @@
 package com.googlecode.d2j.dex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -13,6 +14,7 @@ import java.util.Stack;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -22,6 +24,7 @@ import com.googlecode.d2j.DexConstants;
 import com.googlecode.d2j.DexType;
 import com.googlecode.d2j.Field;
 import com.googlecode.d2j.Method;
+import com.googlecode.d2j.MethodHandle;
 import com.googlecode.d2j.Visibility;
 import com.googlecode.d2j.converter.Dex2IRConverter;
 import com.googlecode.d2j.converter.IR2JConverter;
@@ -511,10 +514,7 @@ public class Dex2Asm {
                 }
             }
         }
-        Object value = fieldNode.cst;
-        if (value instanceof DexType) {
-            value = Type.getType(((DexType) value).desc);
-        }
+        Object value = convertConstantValue(fieldNode.cst);
         final int FieldCleanFlag = ~DexConstants.ACC_DECLARED_SYNCHRONIZED;
         FieldVisitor fv = cv.visitField(fieldNode.access & FieldCleanFlag, fieldNode.field.getName(),
                 fieldNode.field.getType(), signature, value);
@@ -523,6 +523,47 @@ public class Dex2Asm {
         }
         accept(fieldNode.anns, fv);
         fv.visitEnd();
+    }
+
+    public static Object[] convertConstantValues(Object[] v) {
+        Object[] copy = Arrays.copyOf(v, v.length);
+        for (int i = 0; i < copy.length; i++) {
+            Object ele = copy[i];
+            ele = convertConstantValue(ele);
+            copy[i] = ele;
+        }
+        return copy;
+    }
+
+    public static Object convertConstantValue(Object ele) {
+        if (ele instanceof DexType) {
+            ele = Type.getType(((DexType) ele).desc);
+        } else if (ele instanceof MethodHandle) {
+            Handle h = null;
+            MethodHandle mh = (MethodHandle) ele;
+            switch (mh.getType()) {
+                case MethodHandle.INSTANCE_GET:
+                    h = new Handle(Opcodes.H_GETFIELD, toInternalName(mh.getField().getOwner()), mh.getField().getName(), mh.getField().getType());
+                    break;
+                case MethodHandle.INSTANCE_PUT:
+                    h = new Handle(Opcodes.H_PUTFIELD, toInternalName(mh.getField().getOwner()), mh.getField().getName(), mh.getField().getType());
+                    break;
+                case MethodHandle.STATIC_GET:
+                    h = new Handle(Opcodes.H_GETFIELD, toInternalName(mh.getField().getOwner()), mh.getField().getName(), mh.getField().getType());
+                    break;
+                case MethodHandle.STATIC_PUT:
+                    h = new Handle(Opcodes.H_PUTFIELD, toInternalName(mh.getField().getOwner()), mh.getField().getName(), mh.getField().getType());
+                    break;
+                case MethodHandle.INVOKE_INSTANCE:
+                    h = new Handle(Opcodes.H_INVOKEVIRTUAL, toInternalName(mh.getMethod().getOwner()), mh.getMethod().getName(), mh.getMethod().getDesc());
+                    break;
+                case MethodHandle.INVOKE_STATIC:
+                    h = new Handle(Opcodes.H_INVOKESTATIC, toInternalName(mh.getMethod().getOwner()), mh.getMethod().getName(), mh.getMethod().getDesc());
+                    break;
+            }
+            ele = h;
+        }
+        return ele;
     }
 
     public void convertMethod(DexClassNode classNode, DexMethodNode methodNode, ClassVisitor cv) {
