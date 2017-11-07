@@ -153,27 +153,46 @@ public class DexFix {
     }
 
     static boolean isPrimitiveZero(String desc, Object value) {
-        if (value != null && desc != null && desc.length() > 0) {
-            switch (desc.charAt(0)) {
-            // case 'V':// VOID_TYPE
-            case 'Z':// BOOLEAN_TYPE
-                return ((Boolean) value).booleanValue() == false;
-            case 'C':// CHAR_TYPE
-                return ((Character) value).charValue() == (char) 0;
-            case 'B':// BYTE_TYPE
-                return ((Byte) value).byteValue() == 0;
-            case 'S':// SHORT_TYPE
-                return ((Short) value).shortValue() == 0;
-            case 'I':// INT_TYPE
-                return ((Integer) value).intValue() == 0;
-            case 'F':// FLOAT_TYPE
-                return ((Float) value).floatValue() == 0f;
-            case 'J':// LONG_TYPE
-                return ((Long) value).longValue() == 0L;
-            case 'D':// DOUBLE_TYPE
-                return ((Double) value).doubleValue() == 0.0;
-            }
-        }
+	try {
+	        if (value != null && desc != null && desc.length() > 0) {
+	            switch (desc.charAt(0)) {
+	            // case 'V':// VOID_TYPE
+	            case 'Z':// BOOLEAN_TYPE
+	                return ((Boolean) value).booleanValue() == false;
+	            case 'C':// CHAR_TYPE
+	                return ((Character) value).charValue() == (char) 0;
+	            case 'B':// BYTE_TYPE
+	                return ((Byte) value).byteValue() == 0;
+	            case 'S':// SHORT_TYPE
+	                return ((Short) value).shortValue() == 0;
+	            case 'I':// INT_TYPE
+	                return ((Integer) value).intValue() == 0;
+	            case 'F':// FLOAT_TYPE
+	                return ((Float) value).floatValue() == 0f;
+	            case 'J':// LONG_TYPE
+	                return ((Long) value).longValue() == 0L;
+	            case 'D':// DOUBLE_TYPE
+	                return ((Double) value).doubleValue() == 0.0;
+	            }
+	        }
+	} catch (ClassCastException e) {
+                if (value instanceof Character)
+                    return ((Character) value).charValue() == (char) 0;
+                else if (value instanceof Boolean)
+                    return ((Boolean) value).booleanValue() == false;
+		else if (value instanceof Byte)
+		    return ((Byte) value).byteValue() == 0;
+		else if (value instanceof Short)
+			return ((Short) value).shortValue() == 0;
+		else if (value instanceof Integer)
+			return ((Integer) value).intValue() == 0;
+		else if (value instanceof Float)
+			return ((Float) value).floatValue() == 0f;
+		else if (value instanceof Long)
+			return ((Long) value).longValue() == 0L;
+		else if (value instanceof Double)
+			return ((Double) value).doubleValue() == 0.0;
+	}
         return false;
     }
 }
