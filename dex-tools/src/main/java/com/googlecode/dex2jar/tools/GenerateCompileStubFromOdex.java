@@ -64,7 +64,7 @@ public class GenerateCompileStubFromOdex extends BaseCmd {
         DexFileReader reader = new DexFileReader(bs);
         DexFileNode fileNode = new DexFileNode();
         reader.accept(fileNode, DexFileReader.SKIP_CODE);
-        Dex2Asm dex2Asm = new Dex2Asm();
+        Dex2Asm dex2Asm = new Dex2Asm(reader.getDexVersion());
         dex2Asm.convertDex(fileNode, new ClassVisitorFactory() {
             @Override
             public ClassVisitor create(final String classInternalName) {

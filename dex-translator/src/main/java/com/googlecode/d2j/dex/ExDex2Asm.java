@@ -27,7 +27,8 @@ import com.googlecode.d2j.node.DexMethodNode;
 public class ExDex2Asm extends Dex2Asm {
     final protected DexExceptionHandler exceptionHandler;
 
-    public ExDex2Asm(DexExceptionHandler exceptionHandler) {
+    public ExDex2Asm(int dexVersion, DexExceptionHandler exceptionHandler) {
+        super(dexVersion);
         this.exceptionHandler = exceptionHandler;
     }
 
