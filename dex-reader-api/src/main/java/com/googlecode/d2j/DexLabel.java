@@ -24,7 +24,9 @@ package com.googlecode.d2j;
 public class DexLabel {
     public String displayName;
     private int offset = -1;
+    public Integer lineNumber = -1;
 
+    
     /**
      * 
      * @param offset

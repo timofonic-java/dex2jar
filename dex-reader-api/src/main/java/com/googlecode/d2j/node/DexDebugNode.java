@@ -183,6 +183,7 @@ public class DexDebugNode extends DexDebugVisitor {
             public LineNumber(DexLabel label, int line) {
                 super(label);
                 this.line = line;
+                label.lineNumber = line;
             }
 
             @Override
