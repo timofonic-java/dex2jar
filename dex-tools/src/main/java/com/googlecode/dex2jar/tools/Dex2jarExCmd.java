@@ -144,11 +144,11 @@ public class Dex2jarExCmd extends BaseCmd {
             @Override
             public ClassVisitor create(final String name) {
                 return new ClassVisitor(Opcodes.ASM4, new ClassWriter(ClassWriter.COMPUTE_MAXS)) {
-                    @Override
-                    public void visit(int version, int access, String name, String signature,
-                                      String superName, String[] interfaces) {
-                        super.visit(javaVersion, access, name, signature, superName, interfaces);
-                    }
+                    //@Override
+                    //public void visit(int version, int access, String name, String signature,
+                    //                  String superName, String[] interfaces) {
+                    //    super.visit(javaVersion, access, name, signature, superName, interfaces);
+                    //}
 
                     @Override
                     public void visitEnd() {
@@ -175,7 +175,7 @@ public class Dex2jarExCmd extends BaseCmd {
             }
         };
 
-        new ExDex2Asm(exceptionHandler) {
+        new ExDex2Asm(javaVersion, exceptionHandler) {
 
             @Override
             public void convertDex(DexFileNode fileNode, final ClassVisitorFactory cvf) {

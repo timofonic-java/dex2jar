@@ -135,7 +135,7 @@ public class Dex2jarMultiThreadCmd extends BaseCmd {
             }
         };
 
-        new ExDex2Asm(exceptionHandler) {
+        new ExDex2Asm(reader.getDexVersion(), exceptionHandler) {
 
             @Override
             public void convertDex(DexFileNode fileNode, final ClassVisitorFactory cvf) {

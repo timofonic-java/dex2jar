@@ -29,6 +29,7 @@ import com.googlecode.d2j.dex.LambadaNameSafeClassAdapter;
 import com.googlecode.d2j.node.DexClassNode;
 import com.googlecode.d2j.node.DexFileNode;
 import com.googlecode.d2j.node.DexMethodNode;
+import com.googlecode.d2j.reader.BaseDexFileReader;
 import com.googlecode.d2j.reader.zip.ZipUtil;
 import com.googlecode.d2j.smali.BaksmaliDumper;
 import com.googlecode.d2j.visitors.DexClassVisitor;
@@ -298,7 +299,7 @@ public abstract class TestUtils {
     public static byte[] translateAndCheck(DexFileNode fileNode, DexClassNode clzNode) throws AnalyzerException,
             IllegalAccessException {
         // 1. convert to .class
-        Dex2Asm dex2Asm = new Dex2Asm() {
+        Dex2Asm dex2Asm = new Dex2Asm(BaseDexFileReader.DEX_035) {
             @Override
             public void convertCode(DexMethodNode methodNode, MethodVisitor mv) {
                 try {

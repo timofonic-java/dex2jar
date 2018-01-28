@@ -123,7 +123,7 @@ public class Dex2jar {
             }
         };
 
-        new ExDex2Asm(exceptionHandler) {
+        new ExDex2Asm(reader.getDexVersion(), exceptionHandler) {
             public void convertCode(DexMethodNode methodNode, MethodVisitor mv) {
                 if ((readerConfig & DexFileReader.SKIP_CODE) != 0 && methodNode.method.getName().equals("<clinit>")) {
                     // also skip clinit

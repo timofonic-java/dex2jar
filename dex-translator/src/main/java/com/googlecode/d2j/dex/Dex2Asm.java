@@ -33,6 +33,7 @@ import com.googlecode.d2j.node.DexClassNode;
 import com.googlecode.d2j.node.DexFieldNode;
 import com.googlecode.d2j.node.DexFileNode;
 import com.googlecode.d2j.node.DexMethodNode;
+import com.googlecode.d2j.reader.BaseDexFileReader;
 import com.googlecode.dex2jar.ir.IrMethod;
 import com.googlecode.dex2jar.ir.ts.AggTransformer;
 import com.googlecode.dex2jar.ir.ts.CleanLabel;
@@ -362,6 +363,12 @@ public class Dex2Asm {
         return classes;
     }
 
+    protected final int classVersion;
+
+    public Dex2Asm(int dexVersion) {
+        classVersion = dexVersion >= BaseDexFileReader.DEX_037 ? Opcodes.V1_8 : Opcodes.V1_6;
+    }
+
     public void convertClass(DexClassNode classNode, ClassVisitorFactory cvf, DexFileNode fileNode) {
         convertClass(classNode, cvf, collectClzInfo(fileNode));
     }
@@ -429,7 +436,7 @@ public class Dex2Asm {
         }
         access = clearClassAccess(isInnerClass, access);
 
-        cv.visit(Opcodes.V1_6, access, toInternalName(classNode.className), signature,
+        cv.visit(classVersion, access, toInternalName(classNode.className), signature,
                 classNode.superClass == null ? null : toInternalName(classNode.superClass), interfaceInterNames);
 
         List<InnerClassNode> innerClassNodes = new ArrayList<InnerClassNode>(5);
