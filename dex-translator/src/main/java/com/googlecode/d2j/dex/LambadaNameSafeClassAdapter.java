@@ -13,7 +13,9 @@ public class LambadaNameSafeClassAdapter extends RemappingClassAdapter {
         super(cv, new Remapper() {
             @Override
             public String mapType(String type) {
-                if (type == null) return null;
+                if (type == null) {
+                    return null;
+                }
                 return type.replace('-', '_');
             }
         });

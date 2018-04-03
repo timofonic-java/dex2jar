@@ -1,13 +1,6 @@
 package com.googlecode.dex2jar.ir.ts;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import com.googlecode.dex2jar.ir.IrMethod;
 import com.googlecode.dex2jar.ir.expr.Constant;
@@ -51,6 +44,13 @@ import com.googlecode.dex2jar.ir.stmt.Stmt;
  * </pre>
  */
 public class RemoveConstantFromSSA extends StatedTransformer {
+
+    public static final Comparator<Local> LOCAL_COMPARATOR = new Comparator<Local>() {
+        @Override
+        public int compare(Local local, Local t1) {
+            return Integer.compare(local._ls_index, t1._ls_index);
+        }
+    };
 
     @Override
     public boolean transformReportChanged(IrMethod method) {

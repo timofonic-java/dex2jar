@@ -58,16 +58,17 @@ public class Smali2jTest {
         List<Runner> runners;
 
         public void init(final Class<?> testClass) throws InitializationError {
-            URL url = testClass.getResource("/" + testClass.getName().replace('.', '/') + ".class");
+            URL url = testClass.getResource("/smalis/writeString.smali");
             System.out.println("url is " + url);
             Assert.assertNotNull(url);
 
             final String file = url.getFile();
             Assert.assertNotNull(file);
-            String dirx = file.substring(0, file.length() - testClass.getName().length() - ".class".length());
 
-            System.out.println("dirx is " + dirx);
-            final Path basePath = new File(dirx, "smalis").toPath();
+            Path dirxpath = new File(file).toPath();
+
+            final Path basePath = dirxpath.getParent();
+
             final Set<Path> files = new TreeSet<>();
             try {
                 Files.walkFileTree(basePath, new SimpleFileVisitor<Path>() {
@@ -106,7 +107,7 @@ public class Smali2jTest {
 
                     @Override
                     protected Description describeChild(DexClassNode child) {
-                        return Description.createTestDescription(testClass, "s [" + child.className + "]");
+                        return Description.createTestDescription(testClass, "[" + child.className + "]");
                     }
 
                     @Override
@@ -114,7 +115,15 @@ public class Smali2jTest {
                         runLeaf(new Statement() {
                             @Override
                             public void evaluate() throws Throwable {
-                                TestUtils.translateAndCheck(fileNode, child);
+                                if(p.getFileName().toString().contains("mayfail")) {
+                                    try {
+                                        TestUtils.translateAndCheck(fileNode, child);
+                                    } catch (Exception ex) {
+                                        ex.printStackTrace();
+                                    }
+                                } else {
+                                    TestUtils.translateAndCheck(fileNode, child);
+                                }
                             }
                         }, describeChild(child), notifier);
                     }
