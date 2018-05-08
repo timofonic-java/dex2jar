@@ -73,9 +73,8 @@ public class Dex2jarExCmd extends BaseCmd {
 
     @Override
     protected void doCommandLine() throws Exception {
-        long start = System.currentTimeMillis();
-        List<String> f = new ArrayList<>();
-        f.addAll(Arrays.asList(remainingArgs));
+        final long start = System.currentTimeMillis();
+        final List<String> f = new ArrayList<>(Arrays.asList(remainingArgs));
         if (onlyClinit) {
             readerConfig |= DexFileReader.KEEP_CLINIT | DexFileReader.SKIP_CODE;
         }
@@ -93,7 +92,7 @@ public class Dex2jarExCmd extends BaseCmd {
             @Override
             public void run() {
                 if (fileIt.hasNext()) {
-                    String fileName = fileIt.next();
+                    final String fileName = fileIt.next();
                     try {
                         run0(fileName, executorService);
                     } catch (Exception e) {
@@ -111,10 +110,10 @@ public class Dex2jarExCmd extends BaseCmd {
     }
 
     private void run0(String fileName, final ExecutorService executorService) throws IOException {
-        File input = new File(fileName).getAbsoluteFile();
-        String baseName = getBaseName(input.toPath());
-        Path currentDir = input.getParentFile().toPath();
-        Path file = output == null ? currentDir.resolve(baseName + "-dex2jar.jar") : output;
+        final File input = new File(fileName).getAbsoluteFile();
+        final String baseName = getBaseName(input.toPath());
+        final Path currentDir = input.getParentFile().toPath();
+        final Path file = output == null ? currentDir.resolve(baseName + "-dex2jar.jar") : output;
         System.out.println("dex2jar " + fileName + " -> " + file);
 
         final Path errorFile = currentDir.resolve(baseName + "-error.zip");
@@ -153,9 +152,9 @@ public class Dex2jarExCmd extends BaseCmd {
                     @Override
                     public void visitEnd() {
                         super.visitEnd();
-                        ClassWriter cw = (ClassWriter) super.cv;
+                        final ClassWriter cw = (ClassWriter) super.cv;
 
-                        byte[] data;
+                        final byte[] data;
                         try {
                             data = cw.toByteArray();
                         } catch (Exception ex) {
@@ -164,7 +163,7 @@ public class Dex2jarExCmd extends BaseCmd {
                             return;
                         }
                         try {
-                            Path dist1 = dist.resolve(name + ".class");
+                            final Path dist1 = dist.resolve(name + ".class");
                             BaseCmd.createParentDirectories(dist1);
                             Files.write(dist1, data);
                         } catch (IOException e) {
@@ -200,7 +199,7 @@ public class Dex2jarExCmd extends BaseCmd {
                                     e.printStackTrace();
                                 }
                             }
-                            BaksmaliBaseDexExceptionHandler exHandler =
+                            final BaksmaliBaseDexExceptionHandler exHandler =
                                     (BaksmaliBaseDexExceptionHandler) exceptionHandler;
                             if (exHandler.hasException()) {
                                 exHandler.dump(errorFile, new String[0]);
@@ -218,13 +217,13 @@ public class Dex2jarExCmd extends BaseCmd {
     }
 
     public static List<byte[]> readMultipleDex(Path file) throws IOException {
-        List<byte[]> dexBytes = new ArrayList<>(2);
-        byte[] allBytes = Files.readAllBytes(file);
+        final List<byte[]> dexBytes = new ArrayList<>(2);
+        final byte[] allBytes = Files.readAllBytes(file);
 
         if (allBytes.length < 3) {
             throw new IOException("File too small to be a dex/zip");
         }
-        String fileType = new String(allBytes, 0, 3);
+        final String fileType = new String(allBytes, 0, 3);
         if ("dex".equals(fileType)) { // dex
             dexBytes.add(allBytes);
             return dexBytes;
